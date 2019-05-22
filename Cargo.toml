@@ -2,7 +2,7 @@
 name = "safe_cli"
 version = "0.0.1"
 description = "SAFE CLI"
-authors = ["Hunter Lester <guilfordhunter@gmail.com>", "bochaco <gabrielviganotti@gmail.com>", "Josh Wilson <joshuef@gmail.com>"]
+authors = ["bochaco <gabrielviganotti@gmail.com>", "Josh Wilson <joshuef@gmail.com>"]
 publish = false
 edition = "2018"
 

@@ -14,6 +14,23 @@ use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 #[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+pub enum WalletSubCommands {
+    #[structopt(name = "add")]
+    /// Manage files on the network
+    Add {
+        /// The safe:// url to add
+        #[structopt(long = "link")]
+        link: String,
+        /// The name to give this wallet
+        #[structopt(long = "name")]
+        name: String,
+    },
+    #[structopt(name = "create")]
+    /// Create a new Wallet/CoinBalance
+    Create {},
+}
+#[derive(StructOpt, Debug)]
+#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 pub enum SubCommands {
     #[structopt(name = "container")]
     /// Create a new SAFE Network account with the credentials provided
@@ -60,9 +77,9 @@ pub enum SubCommands {
     #[structopt(name = "wallet")]
     /// Manage wallets on the network
     Wallet {
-        /// The invitation token for creating a new SAFE Network account
-        #[structopt(short = "ww", long = "whut")]
-        invite: String,
+        /// subcommands
+        #[structopt(subcommand)]
+        cmd: Option<WalletSubCommands>,
     },
     #[structopt(name = "safe-id")]
     /// Manage identities on the network
