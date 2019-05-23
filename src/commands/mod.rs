@@ -6,20 +6,8 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-mod cli;
-mod commands;
-
-use cli::run;
-use env_logger;
-use log::{debug, error};
-use std::process;
-
-fn main() {
-    env_logger::init();
-    debug!("Starting SAFE CLI...");
-
-    if let Err(e) = run() {
-        error!("safe_cli error: {}", e);
-        process::exit(1);
-    }
-}
+pub mod global;
+pub mod keys;
+pub mod pns;
+pub mod safe_id;
+pub mod wallet;
