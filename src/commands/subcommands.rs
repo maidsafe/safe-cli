@@ -12,7 +12,7 @@
 // use std::env;
 use structopt::StructOpt;
 
-use crate::commands::{keys, pns, safe_id, wallet};
+use crate::commands::{container, files, keys, pns, safe_id, wallet};
 
 #[derive(StructOpt, Debug)]
 #[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
@@ -20,30 +20,29 @@ pub enum SubCommands {
     #[structopt(name = "container")]
     /// Create a new SAFE Network account with the credentials provided
     Container {
-        /// The invitation token for creating a new SAFE Network account
-        #[structopt(short = "c", long = "create")]
-        invite: String,
+        /// subcommands
+        #[structopt(subcommand)]
+        cmd: Option<container::ContainerSubCommands>,
     },
     #[structopt(name = "auth")]
-    /// Authorise an application by providing the authorisation request URI or string
-    Auth {
-        /// The authorisation request URI or string
-        #[structopt(short = "r", long = "req")]
-        req: String,
-    },
+    /// Authorise the CLI
+    Auth {},
     #[structopt(name = "cat")]
     /// Read data on the network.
     Cat {
-        /// The invitation token for creating a new SAFE Network account
-        #[structopt(short = "c", long = "cat")]
-        invite: String,
+        /// The key to cat
+        #[structopt(short = "k", long = "key")]
+        key: String,
+        /// Version of the resource to cat
+        #[structopt(long = "version")]
+        version: String,
     },
     #[structopt(name = "files")]
     /// Manage files on the network
     Files {
-        /// The invitation token for creating a new SAFE Network account
-        #[structopt(short = "c", long = "cat")]
-        invite: String,
+        /// subcommands
+        #[structopt(subcommand)]
+        cmd: Option<files::FilesSubCommands>,
     },
     #[structopt(name = "pns")]
     /// Manage public names on the network

@@ -12,7 +12,7 @@
 // use std::env;
 use structopt::StructOpt;
 
-use crate::commands::global::SubCommands;
+use crate::commands::subcommands::SubCommands;
 
 #[derive(StructOpt, Debug)]
 /// Interact with the SAFE Network
