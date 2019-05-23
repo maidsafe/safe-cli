@@ -14,9 +14,37 @@ use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 #[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
+pub enum KeySubCommands {
+    #[structopt(name = "add")]
+    /// Add a key to another document
+    Add {
+        /// The safe:// url to add
+        #[structopt(long = "link")]
+        link: String,
+        /// The name to give this key
+        #[structopt(long = "name")]
+        name: String,
+    },
+    #[structopt(name = "create")]
+    /// Create a new KeyPair
+    Create {
+        /// The name to give this key
+        #[structopt(long = "anon")]
+        anon: String,
+        /// The name to give this key
+        #[structopt(long = "name")]
+        name: String,
+        /// Preload the key with a coinbalance
+        #[structopt(long = "preload")]
+        preload: String,
+    },
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
 pub enum WalletSubCommands {
     #[structopt(name = "add")]
-    /// Manage files on the network
+    /// Add a wallet to another document
     Add {
         /// The safe:// url to add
         #[structopt(long = "link")]
@@ -25,9 +53,38 @@ pub enum WalletSubCommands {
         #[structopt(long = "name")]
         name: String,
     },
+    #[structopt(name = "balance")]
+    /// Query a new Wallet or PublicKeys CoinBalance
+    Balance {},
+    #[structopt(name = "check-tx")]
+    /// Check the status of a given transaction
+    CheckTx {},
     #[structopt(name = "create")]
     /// Create a new Wallet/CoinBalance
     Create {},
+    #[structopt(name = "sweep")]
+    /// Move all coins within a wallet to a given balance
+    Sweep {
+        /// The source wallet for funds
+        #[structopt(long = "from")]
+        from: String,
+        /// The receiving wallet/ballance
+        #[structopt(long = "to")]
+        to: String,
+    },
+    #[structopt(name = "transfer")]
+    /// Manage files on the network
+    Transfer {
+        /// The safe:// url to add
+        #[structopt(long = "amount")]
+        amount: String,
+        /// The source wallet / balance for funds
+        #[structopt(long = "from")]
+        from: String,
+        /// The receiving wallet/ballance
+        #[structopt(long = "to")]
+        to: String,
+    },
 }
 #[derive(StructOpt, Debug)]
 #[structopt(raw(setting = "structopt::clap::AppSettings::ColoredHelp"))]
@@ -70,9 +127,9 @@ pub enum SubCommands {
     #[structopt(name = "keys")]
     /// Manage keys on the network
     Keys {
-        /// The invitation token for creating a new SAFE Network account
-        #[structopt(short = "c", long = "cat")]
-        invite: String,
+        /// subcommands
+        #[structopt(subcommand)]
+        cmd: Option<KeySubCommands>,
     },
     #[structopt(name = "wallet")]
     /// Manage wallets on the network
@@ -106,7 +163,7 @@ pub struct CmdArgs {
     #[structopt(short = "o", long = "output")]
     output: String,
     /// Print human readable responses. (Alias to --output human-readable.)
-    #[structopt(short = "h", long = "human-readable")]
+    #[structopt(short = "hr", long = "human-readable")]
     human: bool,
     /// Increase output verbosity. (More logs!)
     #[structopt(short = "v", long = "verbose")]
