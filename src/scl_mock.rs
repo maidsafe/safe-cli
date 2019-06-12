@@ -11,9 +11,10 @@ use log::debug;
 use rand::rngs::OsRng;
 use rand::Rng;
 use rand_core::RngCore;
-use safe_nd::mutable_data::{MutableData, MutableDataKind, Permission, User, Value};
+use safe_nd::mutable_data::{MutableData, /*MutableDataKind, Permission, User,*/ Value};
 pub use safe_nd::{XorName, XOR_NAME_LEN};
 use safecoin::{Coins, NanoCoins};
+//use safe_nd::{Coins, NanoCoins};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -42,13 +43,13 @@ struct MockData {
     coin_balances: BTreeMap<XorNameStr, CoinBalance>,
     txs: BTreeMap<XorNameStr, TxStatusList>, // keep track of TX status per tx ID, per xorname
     unpublished_append_only: BTreeMap<XorNameStr, AppendOnlyDataMock>, // keep a versioned map of data per xorname
-    mutable_data: BTreeMap<XorNameStr, MutableData>,
+    mutable_data: BTreeMap<XorNameStr, u64/*MutableData*/>,
 }
 
 fn xorname_from_pk(pk: &PublicKey) -> XorName {
     let pk_as_bytes: [u8; 48] = pk.to_bytes();
     let mut xorname = XorName::default();
-    xorname.copy_from_slice(&pk_as_bytes[..XOR_NAME_LEN]);
+    xorname.0.copy_from_slice(&pk_as_bytes[..XOR_NAME_LEN]);
     xorname
 }
 
@@ -97,7 +98,7 @@ impl MockSCL {
         let amount_nano = unwrap!(NanoCoins::try_from(amount_coin));
         let from_new_amount = unwrap!(NanoCoins::new(from_nano_balance.num() - amount_nano.num())); // TODO: check it has enough balance
         self.mock_data.coin_balances.insert(
-            vec_to_hex(from_xorname.to_vec()),
+            vec_to_hex(from_xorname.0.to_vec()),
             CoinBalance {
                 owner: (*from_pk),
                 value: Coins::from(from_new_amount).to_string(),
@@ -106,7 +107,7 @@ impl MockSCL {
 
         let to_xorname = xorname_from_pk(new_balance_owner);
         self.mock_data.coin_balances.insert(
-            vec_to_hex(to_xorname.to_vec()),
+            vec_to_hex(to_xorname.0.to_vec()),
             CoinBalance {
                 owner: (*new_balance_owner),
                 value: amount.to_string(),
@@ -119,7 +120,7 @@ impl MockSCL {
     pub fn allocate_test_coins(&mut self, to_pk: &PublicKey, amount: &str) -> XorName {
         let xorname = xorname_from_pk(to_pk);
         self.mock_data.coin_balances.insert(
-            vec_to_hex(xorname.to_vec()),
+            vec_to_hex(xorname.0.to_vec()),
             CoinBalance {
                 owner: (*to_pk),
                 value: amount.to_string(),
@@ -131,7 +132,7 @@ impl MockSCL {
 
     pub fn get_balance_from_pk(&self, pk: &PublicKey, _sk: &SecretKey) -> String {
         let xorname = xorname_from_pk(pk);
-        let coin_balance = &self.mock_data.coin_balances[&vec_to_hex(xorname.to_vec())];
+        let coin_balance = &self.mock_data.coin_balances[&vec_to_hex(xorname.0.to_vec())];
         coin_balance
             .value
             .to_string()
@@ -140,7 +141,7 @@ impl MockSCL {
     }
 
     pub fn get_balance_from_xorname(&self, xorname: &XorName, _sk: &SecretKey) -> String {
-        let coin_balance = &self.mock_data.coin_balances[&vec_to_hex(xorname.to_vec())];
+        let coin_balance = &self.mock_data.coin_balances[&vec_to_hex(xorname.0.to_vec())];
         coin_balance
             .value
             .to_string()
@@ -149,7 +150,7 @@ impl MockSCL {
     }
 
     pub fn keys_fetch_pk(&self, xorname: &XorName) -> PublicKey {
-        let coin_balance = &self.mock_data.coin_balances[&vec_to_hex(xorname.to_vec())];
+        let coin_balance = &self.mock_data.coin_balances[&vec_to_hex(xorname.0.to_vec())];
         coin_balance.owner
     }
 
@@ -166,7 +167,7 @@ impl MockSCL {
 
         let the_tx_id = *tx_id;
         // generate TX in destination section (to_pk)
-        let mut txs_for_xorname = match self.mock_data.txs.get(&vec_to_hex(to_xorname.to_vec())) {
+        let mut txs_for_xorname = match self.mock_data.txs.get(&vec_to_hex(to_xorname.0.to_vec())) {
             Some(txs) => txs.clone(),
             None => BTreeMap::new(),
         };
@@ -176,7 +177,7 @@ impl MockSCL {
         );
         self.mock_data
             .txs
-            .insert(vec_to_hex(to_xorname.to_vec()), txs_for_xorname);
+            .insert(vec_to_hex(to_xorname.0.to_vec()), txs_for_xorname);
 
         let amount_coin = unwrap!(Coins::from_str(amount));
 
@@ -186,7 +187,7 @@ impl MockSCL {
         let amount_nano = unwrap!(NanoCoins::try_from(amount_coin));
         let from_new_amount = unwrap!(NanoCoins::new(from_nano_balance.num() - amount_nano.num())); // TODO: check it has enough balance
         self.mock_data.coin_balances.insert(
-            vec_to_hex(from_xorname.to_vec()),
+            vec_to_hex(from_xorname.0.to_vec()),
             CoinBalance {
                 owner: (*from_pk),
                 value: Coins::from(from_new_amount).to_string(),
@@ -200,7 +201,7 @@ impl MockSCL {
         let to_nano_balance = unwrap!(NanoCoins::try_from(to_balance));
         let to_new_amount = unwrap!(NanoCoins::new(to_nano_balance.num() + amount_nano.num()));
         self.mock_data.coin_balances.insert(
-            vec_to_hex(to_xorname.to_vec()),
+            vec_to_hex(to_xorname.0.to_vec()),
             CoinBalance {
                 owner: (*to_pk),
                 value: Coins::from(to_new_amount).to_string(),
@@ -213,7 +214,7 @@ impl MockSCL {
     #[allow(dead_code)]
     pub fn get_transaction(&self, tx_id: &Uuid, pk: &PublicKey, _sk: &SecretKey) -> String {
         let xorname = xorname_from_pk(pk);
-        let txs_for_xorname = &self.mock_data.txs[&vec_to_hex(xorname.to_vec())];
+        let txs_for_xorname = &self.mock_data.txs[&vec_to_hex(xorname.0.to_vec())];
         let tx_state = unwrap!(txs_for_xorname.get(&tx_id.to_string()));
         tx_state.to_string()
     }
@@ -229,7 +230,7 @@ impl MockSCL {
         let mut uao_for_xorname = match self
             .mock_data
             .unpublished_append_only
-            .get(&vec_to_hex(xorname.to_vec()))
+            .get(&vec_to_hex(xorname.0.to_vec()))
         {
             Some(uao) => uao.clone(),
             None => BTreeMap::new(),
@@ -237,7 +238,7 @@ impl MockSCL {
         uao_for_xorname.insert(uao_for_xorname.len(), data.to_vec());
         self.mock_data
             .unpublished_append_only
-            .insert(vec_to_hex(xorname.to_vec()), uao_for_xorname);
+            .insert(vec_to_hex(xorname.0.to_vec()), uao_for_xorname);
 
         xorname
     }
@@ -251,7 +252,7 @@ impl MockSCL {
     ) -> Vec<u8> {
         let xorname = xorname_from_pk(pk);
         let uao_for_xorname =
-            &self.mock_data.unpublished_append_only[&vec_to_hex(xorname.to_vec())];
+            &self.mock_data.unpublished_append_only[&vec_to_hex(xorname.0.to_vec())];
         let data = match version {
             Some(version) => unwrap!(uao_for_xorname.get(&version)),
             None => unwrap!(uao_for_xorname.get(&self.mock_data.unpublished_append_only.len())),
@@ -260,6 +261,7 @@ impl MockSCL {
         data.to_vec()
     }
 
+    #[allow(dead_code)]
     pub fn mutable_data_put(
         &mut self,
         name: Option<XorName>,
@@ -272,9 +274,9 @@ impl MockSCL {
             let mut os_rng = OsRng::new().unwrap();
             let mut xorname = [0u8; 32];
             os_rng.fill_bytes(&mut xorname);
-            xorname
+            XorName(xorname)
         });
-
+/*
         let mut permission_map: BTreeMap<User, BTreeSet<Permission>> = BTreeMap::new();
         let perms_string: String;
         if let Some(perms) = permissions {
@@ -334,11 +336,13 @@ impl MockSCL {
             .mutable_data
             .insert(xorname_as_string.clone(), md.clone());
 
-        md.name()
+        md.name()*/
+
+        xorname
     }
 
     pub fn mutable_data_insert(&mut self, xorname: &XorName, _tag: u64, key: &[u8], value: &[u8]) {
-        let xorname_as_string: String = vec_to_hex(xorname.to_vec());
+/*        let xorname_as_string: String = vec_to_hex(xorname.0.to_vec());
         let md = &self.mock_data.mutable_data[&xorname_as_string];
         if let MutableDataKind::Unsequenced { data } = &md.data {
             let mut inner: BTreeMap<String, Value> = data.clone();
@@ -354,12 +358,12 @@ impl MockSCL {
             self.mock_data
                 .mutable_data
                 .insert(xorname_as_string, updated_md);
-        }
+        }*/
     }
 
     #[allow(dead_code)]
     pub fn mutable_data_delete(&mut self, xorname: &XorName, _tag: u64, key: &[u8]) {
-        let xorname_as_string: String = vec_to_hex(xorname.to_vec());
+/*        let xorname_as_string: String = vec_to_hex(xorname.0.to_vec());
         let md = &self.mock_data.mutable_data[&xorname_as_string];
         if let MutableDataKind::Unsequenced { data } = &md.data {
             let mut inner: BTreeMap<String, Value> = data.clone();
@@ -369,7 +373,7 @@ impl MockSCL {
             self.mock_data
                 .mutable_data
                 .insert(xorname_as_string, updated_md);
-        }
+        }*/
     }
 
     pub fn mutable_data_get_key(
@@ -378,7 +382,7 @@ impl MockSCL {
         xorname: &XorName,
         _tag: u64,
     ) -> Result<Option<Vec<u8>>, String> {
-        let xorname_as_string: String = vec_to_hex(xorname.to_vec());
+/*        let xorname_as_string: String = vec_to_hex(xorname.0.to_vec());
         let md = &self.mock_data.mutable_data[&xorname_as_string];
         let mut res = None;
         if let MutableDataKind::Unsequenced { data } = &md.data {
@@ -393,7 +397,9 @@ impl MockSCL {
         }
         // let the_key = unwrap!(res[$key]);
 
-        Ok(res)
+        Ok(res)*/
+
+        Ok(Some(vec![]))
     }
 
     pub fn mutable_data_get_entries(
@@ -401,7 +407,7 @@ impl MockSCL {
         xorname: &XorName,
         _tag: u64,
     ) -> BTreeMap<Vec<u8>, Vec<u8>> {
-        let xorname_as_string: String = vec_to_hex(xorname.to_vec());
+/*        let xorname_as_string: String = vec_to_hex(xorname.0.to_vec());
         let md = &self.mock_data.mutable_data[&xorname_as_string];
         let mut res = BTreeMap::new();
         if let MutableDataKind::Unsequenced { data } = &md.data {
@@ -409,7 +415,9 @@ impl MockSCL {
                 res.insert(elem.0.clone().into_bytes(), elem.1.data.clone());
             });
         }
-        res.clone()
+        res.clone()*/
+
+        BTreeMap::new()
     }
 }
 
