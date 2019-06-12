@@ -10,10 +10,14 @@ use crate::scl_mock::XorName;
 use cid::{Cid, Codec, Version};
 use multibase::{encode, Base};
 use multihash;
-use safe_app::AppError;
+use safe_app::{run, App, AppError};
+// use safe_core::client::{Client/*, CoreError*/, XorNameConverter};
+// use routing::{XorName as OldXorName, /*MutableData*/};
+
 use safe_core::ipc::{
     decode_msg, encode_msg, gen_req_id, resp::AuthGranted, IpcMsg, IpcReq, IpcResp,
 };
+use safe_nd::mutable_data::{Action, MutableData, PermissionSet, SeqMutableData};
 use std::str;
 use threshold_crypto::serde_impl::SerdeSecret;
 use threshold_crypto::{PublicKey, SecretKey, PK_SIZE};
@@ -143,8 +147,8 @@ pub fn xorurl_to_xorname2(xorurl: &str) -> Result<Vec<u8>, String> {
     let cid = Cid::from(cid_str).map_err(|err| format!("Failed to decode XOR-URL: {:?}", err))?;
     let hash = multihash::decode(&cid.hash)
         .map_err(|err| format!("Failed to decode XOR-URL: {:?}", err))?;
-//    let mut xorname = XorName::default();
-//    xorname.0.copy_from_slice(&hash.digest);
+    //    let mut xorname = XorName::default();
+    //    xorname.0.copy_from_slice(&hash.digest);
     Ok(hash.digest.to_vec())
 }
 
@@ -188,7 +192,7 @@ pub fn decode_ipc_msg(ipc_msg: &str) -> Result<AuthGranted, String> {
 
 #[test]
 fn test_xorurl_base32_encoding() {
-    let xorname: XorName = *b"12345678901234567890123456789012";
+    let xorname: XorName = XorName(*b"12345678901234567890123456789012");
     let xorurl = unwrap!(xorname_to_xorurl(&xorname, &"base32".to_string()));
     let base32_xorurl = "safe://bbkulcamjsgm2dknrxha4tamjsgm2dknrxha4tamjsgm2dknrxha4tamjs";
     assert_eq!(xorurl, base32_xorurl);
@@ -199,7 +203,7 @@ fn test_xorurl_base32_encoding() {
 
 #[test]
 fn test_xorurl_base32z_encoding() {
-    let xorname: XorName = *b"12345678901234567890123456789012";
+    let xorname: XorName = XorName(*b"12345678901234567890123456789012");
     let xorurl = unwrap!(xorname_to_xorurl(&xorname, &"base32z".to_string()));
     let base32_xorurl = "safe://hbkwmnycj1gc4dkptz8yhuycj1gc4dkptz8yhuycj1gc4dkptz8yhuycj1";
     assert_eq!(xorurl, base32_xorurl);
@@ -207,7 +211,7 @@ fn test_xorurl_base32z_encoding() {
 
 #[test]
 fn test_xorurl_decoding() {
-    let xorname: XorName = *b"12345678901234567890123456789012";
+    let xorname: XorName = XorName(*b"12345678901234567890123456789012");
     let xorurl = unwrap!(xorname_to_xorurl(&xorname, &"base32".to_string()));
     let decoded_xorname = unwrap!(xorurl_to_xorname(&xorurl));
     assert_eq!(xorname, decoded_xorname);
