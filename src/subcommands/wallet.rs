@@ -161,7 +161,19 @@ pub fn wallet_commander(
         }
         Some(WalletSubCommands::Transfer { amount, from, to }) => {
             //TODO: if from/to start without safe://, i.e. if they are PK hex strings.
-            let tx_id = safe.wallet_transfer(&amount, from, &to)?;
+            let tx_id = safe.wallet_transfer(Some(&amount), from, &to)?;
+
+            if pretty {
+                println!("Success. TX_ID: {:?}", &tx_id);
+            } else {
+                println!("{}", &tx_id)
+            }
+
+            Ok(())
+        }
+        Some(WalletSubCommands::Sweep { from, to }) => {
+            //TODO: if from/to start without safe://, i.e. if they are PK hex strings.
+            let tx_id = safe.wallet_transfer(None, Some(from), &to)?;
 
             if pretty {
                 println!("Success. TX_ID: {:?}", &tx_id);

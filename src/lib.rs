@@ -396,7 +396,7 @@ impl Safe {
     /// ));
     ///
     ///
-    /// unwrap!(safe.wallet_transfer( "10", Some(wallet_xorurl), &wallet_xorurl2 ));
+    /// unwrap!(safe.wallet_transfer( Some("10"), Some(wallet_xorurl), &wallet_xorurl2 ));
     /// let from_balance = unwrap!(safe.keys_balance_from_xorurl( &key1_xorurl, &sk ));
     /// assert_eq!("4.", from_balance);
     /// let to_balance = unwrap!(safe.keys_balance_from_xorurl( &key2_xorurl, &sk ));
@@ -404,7 +404,7 @@ impl Safe {
     /// ```
     pub fn wallet_transfer(
         &mut self,
-        amount: &str,
+        amount: Option<&str>,
         from: Option<XorUrl>,
         to: &str,
     ) -> Result<Uuid, String> {
@@ -438,13 +438,20 @@ impl Safe {
         let from_sk = unwrap!(sk_from_hex(&from_wallet_balance.sk));
         let tx_id = Uuid::new_v4();
 
+        let wallet_amount;
+        if let Some(a) = amount {
+            wallet_amount = String::from(a);
+        } else {
+            wallet_amount = unwrap!(self.wallet_balance(&from_wallet_xorurl, &from_sk.reveal()));
+        }
+
         match self
             .safe_app
-            .safecoin_transfer(&from_pk, &from_sk, &to_pk, &tx_id, amount)
+            .safecoin_transfer(&from_pk, &from_sk, &to_pk, &tx_id, &wallet_amount)
         {
             Err("InvalidAmount") => Err(format!(
                 "The amount '{}' specified for the transfer is invalid",
-                amount
+                wallet_amount
             )),
             Err("NotEnoughBalance") => Err(format!(
                 "Not enough balance for the transfer at Wallet \"{}\"",
@@ -780,7 +787,11 @@ fn test_wallet_transfer_no_default() {
     ));
 
     // test no default balance at wallet in <from> argument
-    match safe.wallet_transfer("10", Some(from_wallet_xorurl.clone()), &to_wallet_xorurl) {
+    match safe.wallet_transfer(
+        Some("10"),
+        Some(from_wallet_xorurl.clone()),
+        &to_wallet_xorurl,
+    ) {
         Err(msg) => assert_eq!(
             msg,
             format!(
@@ -792,7 +803,11 @@ fn test_wallet_transfer_no_default() {
     };
 
     // invert wallets and test no default balance at wallet in <to> argument
-    match safe.wallet_transfer("10", Some(to_wallet_xorurl.clone()), &from_wallet_xorurl) {
+    match safe.wallet_transfer(
+        Some("10"),
+        Some(to_wallet_xorurl.clone()),
+        &from_wallet_xorurl,
+    ) {
         Err(msg) => assert_eq!(
             msg,
             format!(
@@ -830,7 +845,11 @@ fn test_wallet_transfer_diff_amounts() {
     ));
 
     // test fail to transfer more than current balance at wallet in <from> argument
-    match safe.wallet_transfer("100.6", Some(from_wallet_xorurl.clone()), &to_wallet_xorurl) {
+    match safe.wallet_transfer(
+        Some("100.6"),
+        Some(from_wallet_xorurl.clone()),
+        &to_wallet_xorurl,
+    ) {
         Err(msg) => assert_eq!(
             msg,
             format!(
@@ -842,7 +861,11 @@ fn test_wallet_transfer_diff_amounts() {
     };
 
     // test fail to transfer as it's a invalid/non-numeric amount
-    match safe.wallet_transfer(".06", Some(from_wallet_xorurl.clone()), &to_wallet_xorurl) {
+    match safe.wallet_transfer(
+        Some(".06"),
+        Some(from_wallet_xorurl.clone()),
+        &to_wallet_xorurl,
+    ) {
         Err(msg) => assert_eq!(
             msg,
             "The amount '.06' specified for the transfer is invalid",
@@ -851,7 +874,11 @@ fn test_wallet_transfer_diff_amounts() {
     };
 
     // test successful transfer
-    match safe.wallet_transfer("100.4", Some(from_wallet_xorurl.clone()), &to_wallet_xorurl) {
+    match safe.wallet_transfer(
+        Some("100.4"),
+        Some(from_wallet_xorurl.clone()),
+        &to_wallet_xorurl,
+    ) {
         Err(msg) => panic!(format!("Transfer was expected to succeed: {}", msg)),
         Ok(_) => {
             let from_current_balance =

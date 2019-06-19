@@ -209,3 +209,84 @@ fn calling_safe_wallet_create() {
         .stdout(predicate::str::starts_with(PRETTY_WALLET_CREATION_RESPONSE).from_utf8())
         .success();
 }
+
+#[test]
+fn calling_safe_wallet_sweep() {
+    let mut cmd = Command::cargo_bin(CLI).unwrap();
+
+    // FROM
+    let wallet_from = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet_from.contains(SAFE_PROTOCOL));
+
+    // TO
+    let wallet_to = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet_to.contains(SAFE_PROTOCOL));
+
+    let (pk_from_xorurl, from_sk) = create_preload_and_get_keys("123");
+
+    let wallet_from_insert = cmd!(
+        get_bin_location(),
+        "wallet",
+        "insert",
+        &pk_from_xorurl,
+        &wallet_from,
+        &pk_from_xorurl,
+        "--name",
+        "our_from_wallet",
+        "--default",
+        "--secret-key",
+        &from_sk
+    )
+    .read()
+    .unwrap();
+
+    assert_eq!(&wallet_from, &wallet_from_insert);
+
+    let (pk_to_xorurl, to_sk) = create_preload_and_get_keys("3");
+
+    let wallet_to_insert = cmd!(
+        get_bin_location(),
+        "wallet",
+        "insert",
+        &pk_to_xorurl,
+        &wallet_to,
+        &pk_to_xorurl,
+        "--name",
+        "our_to_wallet",
+        "--default",
+        "--secret-key",
+        &to_sk
+    )
+    .read()
+    .unwrap();
+
+    assert_eq!(&wallet_to, &wallet_to_insert);
+
+    cmd.args(&vec![
+        "wallet",
+        "sweep",
+        "--from",
+        &wallet_from,
+        "--to",
+        &wallet_to,
+        "--pretty",
+    ])
+    .assert()
+    .stdout(predicate::str::contains("Success"))
+    .stdout(predicate::str::contains("TX_ID"))
+    .success();
+
+    // To got coins?
+    let to_has = cmd!(get_bin_location(), "wallet", "balance", &wallet_to)
+        .read()
+        .unwrap();
+
+    assert_eq!(to_has, "126");
+
+    // from lost coins?
+    let from_has = cmd!(get_bin_location(), "wallet", "balance", &wallet_from)
+        .read()
+        .unwrap();
+
+    assert_eq!(from_has, "0")
+}
