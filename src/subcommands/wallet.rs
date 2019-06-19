@@ -49,7 +49,12 @@ pub enum WalletSubCommands {
     },
     #[structopt(name = "check-tx")]
     /// Check the status of a given transaction
-    CheckTx {},
+    CheckTx {
+        /// Transaction ID
+        uuid: String,
+        /// Public key
+        key: String,
+    },
     #[structopt(name = "create")]
     /// Create a new Wallet
     Create {},
@@ -179,6 +184,18 @@ pub fn wallet_commander(
                 println!("Success. TX_ID: {:?}", &tx_id);
             } else {
                 println!("{}", &tx_id)
+            }
+
+            Ok(())
+        }
+        Some(WalletSubCommands::CheckTx { uuid, key }) => {
+            //TODO: if from/to start without safe://, i.e. if they are PK hex strings.
+            let status = safe.get_transaction_status(uuid, key);
+
+            if pretty {
+                println!("Transaction status: {:?}", &status);
+            } else {
+                println!("{}", &status)
             }
 
             Ok(())

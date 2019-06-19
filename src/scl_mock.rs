@@ -229,7 +229,7 @@ impl SafeApp {
     }
 
     #[allow(dead_code)]
-    pub fn get_transaction(&self, tx_id: &Uuid, pk: &PublicKeyMock, _sk: &SecretKeyMock) -> String {
+    pub fn get_transaction(&self, tx_id: &Uuid, pk: &PublicKeyMock) -> String {
         let xorname = xorname_from_pk(pk);
         let txs_for_xorname = &self.mock_data.txs[&xorname_to_hex(&xorname)];
         let tx_state = unwrap!(txs_for_xorname.get(&tx_id.to_string()));
@@ -537,10 +537,7 @@ fn test_safecoin_transfer() {
     println!("UUID {}", tx_id);
 
     let _ = mock.safecoin_transfer(&pk1, &sk1, &pk2, &tx_id, "1.4");
-    println!(
-        "Current TX state: {}",
-        mock.get_transaction(&tx_id, &pk2, &sk2)
-    );
+    println!("Current TX state: {}", mock.get_transaction(&tx_id, &pk2));
 
     let curr_balance1 = unwrap!(mock.get_balance_from_pk(&pk1, &sk1));
     let curr_balance2 = unwrap!(mock.get_balance_from_pk(&pk2, &sk2));

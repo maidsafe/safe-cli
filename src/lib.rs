@@ -464,6 +464,14 @@ impl Safe {
             Ok(uuid) => Ok(uuid),
         }
     }
+
+    pub fn get_transaction_status(&self, tx_id: String, key: XorUrl) -> String {
+        let pk = unwrap!(self
+            .safe_app
+            .fetch_pk_from_xorname(&xorurl_to_xorname(&key).unwrap()));
+        let uuid = unwrap!(Uuid::parse_str(&tx_id));
+        self.safe_app.get_transaction(&uuid, &pk)
+    }
 }
 
 // Unit Tests

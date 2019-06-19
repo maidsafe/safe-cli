@@ -162,8 +162,8 @@ impl SafeApp {
 
     //TODO: Replace with SCL calling code
     #[allow(dead_code)]
-    pub fn get_transaction(&self, tx_id: &Uuid, pk: &PublicKeyMock, sk: &SecretKeyMock) -> String {
-        self.scl_mock.get_transaction(tx_id, pk, sk)
+    pub fn get_transaction(&self, tx_id: &Uuid, pk: &PublicKeyMock) -> String {
+        self.scl_mock.get_transaction(tx_id, pk)
     }
 
     //TODO: Replace with SCL calling code

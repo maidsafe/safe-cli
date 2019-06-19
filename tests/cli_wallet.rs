@@ -290,3 +290,82 @@ fn calling_safe_wallet_sweep() {
 
     assert_eq!(from_has, "0")
 }
+
+#[test]
+fn calling_safe_wallet_get_transaction() {
+    let mut cmd = Command::cargo_bin(CLI).unwrap();
+
+    // FROM
+    let wallet_from = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet_from.contains(SAFE_PROTOCOL));
+
+    // TO
+    let wallet_to = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet_to.contains(SAFE_PROTOCOL));
+
+    let (pk_from_xorurl, from_sk) = create_preload_and_get_keys("123");
+
+    let wallet_from_insert = cmd!(
+        get_bin_location(),
+        "wallet",
+        "insert",
+        &pk_from_xorurl,
+        &wallet_from,
+        &pk_from_xorurl,
+        "--name",
+        "our_from_wallet",
+        "--default",
+        "--secret-key",
+        &from_sk
+    )
+    .read()
+    .unwrap();
+
+    assert_eq!(&wallet_from, &wallet_from_insert);
+
+    let (pk_to_xorurl, to_sk) = create_preload_and_get_keys("3");
+
+    let wallet_to_insert = cmd!(
+        get_bin_location(),
+        "wallet",
+        "insert",
+        &pk_to_xorurl,
+        &wallet_to,
+        &pk_to_xorurl,
+        "--name",
+        "our_to_wallet",
+        "--default",
+        "--secret-key",
+        &to_sk
+    )
+    .read()
+    .unwrap();
+
+    assert_eq!(&wallet_to, &wallet_to_insert);
+
+    let transaction_id = cmd!(
+        get_bin_location(),
+        "wallet",
+        "sweep",
+        "--from",
+        &wallet_from,
+        "--to",
+        &wallet_to,
+    )
+    .read()
+    .unwrap();
+
+    let wallet = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet.contains(SAFE_PROTOCOL));
+
+    cmd.args(&vec![
+        "wallet",
+        "check-tx",
+        &transaction_id,
+        &pk_to_xorurl,
+        "--pretty",
+    ])
+    .assert()
+    .stdout(predicate::str::contains("Success"))
+    .success();
+}
