@@ -190,3 +190,50 @@ fn calling_safe_wallet_create_w_premade_keys_has_balance() {
     .unwrap();
     assert_eq!("300", balance);
 }
+
+#[test]
+fn calling_safe_wallet_insert_w_secret_key() {
+    let mut cmd = Command::cargo_bin(CLI).unwrap();
+
+    let wallet = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet.contains(SAFE_PROTOCOL));
+
+    let (pk_pay_xor, pay_sk) = create_preload_and_get_keys("300");
+
+    cmd.args(&vec![
+        "wallet",
+        "insert",
+        &pk_pay_xor,
+        &wallet,
+        "--test-coins",
+        "--preload",
+        "150",
+        "--secret-key",
+        &pay_sk,
+    ])
+    .assert()
+    .success();
+}
+
+#[test]
+fn calling_safe_wallet_insert_as_default() {
+    let mut cmd = Command::cargo_bin(CLI).unwrap();
+
+    let wallet = cmd!(get_bin_location(), "wallet", "create").read().unwrap();
+    assert!(wallet.contains(SAFE_PROTOCOL));
+
+    let (pk_pay_xor, _pay_sk) = create_preload_and_get_keys("300");
+
+    cmd.args(&vec![
+        "wallet",
+        "insert",
+        &pk_pay_xor,
+        &wallet,
+        "--test-coins",
+        "--preload",
+        "150",
+        "--default",
+    ])
+    .assert()
+    .success();
+}
