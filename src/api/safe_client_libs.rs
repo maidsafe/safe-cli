@@ -8,7 +8,7 @@
 
 use super::helpers::{decode_ipc_msg, xorname_from_pk};
 use super::scl_mock::{PublicKeyMock, SafeApp as SafeAppMock, SecretKeyMock};
-use super::xorurl::xorurl_to_xorname;
+use super::xorurl::{create_random_xorname, xorurl_to_xorname};
 use futures::future::Future;
 use log::{debug, warn};
 use rand::rngs::OsRng;
@@ -185,7 +185,7 @@ impl SafeApp {
         //     None => return Err("No immutable data found at this address".to_string()),
         // };
 
-        Ok(())
+        Ok(vec![])
     }
 
     //TODO: Replace with SCL calling code
