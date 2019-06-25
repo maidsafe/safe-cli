@@ -163,7 +163,7 @@ impl SafeApp {
         self.scl_mock.get_transaction(tx_id, pk, sk)
     }
 
-	#[allow(dead_code)]
+    #[allow(dead_code)]
     pub fn put_published_immutable(&mut self, data: &[u8]) -> Result<XorName, String> {
         let xorname = create_random_xorname();
         // // TODO: hash to get xorname.
@@ -174,7 +174,7 @@ impl SafeApp {
         Ok(xorname)
     }
 
-	#[allow(dead_code)]
+    #[allow(dead_code)]
     pub fn get_published_immutable(&mut self, xorname: XorName) -> Result<Vec<u8>, String> {
         // let data = match self
         //     .mock_data
