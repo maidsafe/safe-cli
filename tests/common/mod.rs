@@ -1,9 +1,14 @@
-pub fn get_bin_location() -> &'static str {
-    let mut location = "./target/release/safe_cli";
+use std::env;
+
+pub fn get_bin_location() -> String {
+    let target_dir = match env::var("CARGO_TARGET_DIR") {
+        Ok(target_dir) => target_dir,
+        Err(e) => "./target".to_string()
+    };
     if cfg!(debug_assertions) {
-        location = "./target/debug/safe_cli";
+        return format!("{}{}", target_dir, "/debug/safe_cli");
     }
-    location
+    format!("{}{}", target_dir, "/release/safe_cli")
 }
 
 pub fn create_preload_and_get_keys(preload: &str) -> (String, String) {
