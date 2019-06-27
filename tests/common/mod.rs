@@ -1,8 +1,17 @@
-pub fn get_bin_location() -> &'static str {
-    let mut location = "./target/release/safe_cli";
-    if cfg!(debug_assertions) {
-        location = "./target/debug/safe_cli";
-    }
+use std::env;
+
+pub fn get_bin_location() -> String {
+    let location = match env::var("CARGO_TARGET_DIR") {
+        Ok(location) => location,
+        Err(e) => {
+            let mut location = "./target/release/safe_cli";
+            if cfg!(debug_assertions) {
+                location = "./target/debug/safe_cli";
+            }
+            location.to_string()
+        }
+    };
+
     location
 }
 
