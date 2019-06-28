@@ -1,5 +1,5 @@
 stage('build & test') {
-    linux: {
+    parallel linux: {
         node('docker') {
             checkout(scm)
             sh("make test")
