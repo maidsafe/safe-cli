@@ -11,6 +11,9 @@ build-container:
 	docker rmi -f maidsafe/safe-cli-build:${SAFE_CLI_VERSION}
 	docker build -f Dockerfile.build -t maidsafe/safe-cli-build:${SAFE_CLI_VERSION} .
 
+push-container:
+	docker push maidsafe/safe-cli-build:${SAFE_CLI_VERSION}
+
 test:
 ifeq ($(UNAME_S),Linux)
 	docker run --name "safe-cli-build-${UUID}" -v "${PWD}":/usr/src/safe-cli:Z \
