@@ -76,7 +76,7 @@ endif
 	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz
 	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz
 
-.ONESHELL
+.ONESHELL:
 tag:
 	git config user.name 'build-user'
 	git config user.email 'qa@maidsafe.net'
