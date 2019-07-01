@@ -35,6 +35,7 @@ stage('deploy') {
     node('docker') {
         checkout(scm)
         retrieve_build_artifacts()
+        create_github_release()
     }
 }
 
@@ -48,6 +49,16 @@ def retrieve_build_artifacts() {
     command += "SAFE_CLI_BUILD_NUMBER=${env.BUILD_NUMBER} "
     command += "make retrieve-all-build-artifacts"
     sh(command)
+}
+
+def create_github_release() {
+    withCredentials([usernamePassword(
+        credentialsId: "github_maidsafe_qa_user_credentials",
+        usernameVariable: "GIT_USER",
+        passwordVariable: "GIT_PASSWORD")]) {
+        sh("git checkout -B ${BRANCH_NAME}")
+        sh("make tag")
+    }
 }
 
 def package_build_artifacts(os) {

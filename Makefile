@@ -75,3 +75,11 @@ endif
 	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz
 	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz
 	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz
+
+.ONESHELL
+tag:
+	git config user.name 'build-user'
+	git config user.email 'qa@maidsafe.net'
+	git tag -a ${SAFE_CLI_VERSION} -m "Creating tag for ${SAFE_CLI_VERSION}"
+	git config --local credential.helper "!f() { echo username=\\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
+	git push origin HEAD:${BRANCH}
