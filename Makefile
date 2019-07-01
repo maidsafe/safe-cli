@@ -5,6 +5,7 @@ GROUP_ID := $(shell id -g)
 UNAME_S := $(shell uname -s)
 PWD := $(shell echo $$PWD)
 UUID := $(shell uuidgen | sed 's/-//g')
+S3_BUCKET := safe-jenkins-build-artifacts
 
 build-container:
 	rm -rf target/
@@ -66,15 +67,15 @@ endif
 	mkdir -p artifacts/linux/release
 	mkdir -p artifacts/win/release
 	mkdir -p artifacts/osx/release
-	aws s3 cp --no-sign-request --region eu-west-2 s3://${S3_BUCKET}/${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz .
-	aws s3 cp --no-sign-request --region eu-west-2 s3://${S3_BUCKET}/${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz .
-	aws s3 cp --no-sign-request --region eu-west-2 s3://${S3_BUCKET}/${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz .
-	tar -C artifacts/linux/release -xvf ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz
-	tar -C artifacts/win/release -xvf ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz
-	tar -C artifacts/osx/release -xvf ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz
-	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz
-	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz
-	rm ${SCL_BRANCH}-${SCL_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz
+	aws s3 cp --no-sign-request --region eu-west-2 s3://${S3_BUCKET}/${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz .
+	aws s3 cp --no-sign-request --region eu-west-2 s3://${S3_BUCKET}/${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz .
+	aws s3 cp --no-sign-request --region eu-west-2 s3://${S3_BUCKET}/${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz .
+	tar -C artifacts/linux/release -xvf ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz
+	tar -C artifacts/win/release -xvf ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz
+	tar -C artifacts/osx/release -xvf ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz
+	rm ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-linux-x86_64.tar.gz
+	rm ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-windows-x86_64.tar.gz
+	rm ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-osx-x86_64.tar.gz
 
 .ONESHELL:
 tag:
