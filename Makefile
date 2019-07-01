@@ -16,6 +16,7 @@ push-container:
 
 test:
 	rm -rf artifacts
+	mkdir artifacts
 ifeq ($(UNAME_S),Linux)
 	docker run --name "safe-cli-build-${UUID}" -v "${PWD}":/usr/src/safe-cli:Z \
 		-u ${USER_ID}:${GROUP_ID} \
@@ -26,6 +27,7 @@ ifeq ($(UNAME_S),Linux)
 else
 	cargo check --release
 	cargo test --release --features=scl-mock -- --test-threads=1
+	find target/release -maxdepth 1 -type f -exec cp '{}' artifacts \;
 endif
 
 package-build-artifacts:
