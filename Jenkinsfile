@@ -31,6 +31,25 @@ stage('build & test') {
     }
 }
 
+stage('deploy') {
+    node('docker') {
+        checkout(scm)
+        retrieve_build_artifacts()
+    }
+}
+
+def retrieve_build_artifacts() {
+    command = ""
+    if (env.CHANGE_ID?.trim()) {
+        command += "SAFE_CLI_BRANCH=${env.CHANGE_ID} "
+    } else {
+        command += "SAFE_CLI_BRANCH=${env.BRANCH_NAME} "
+    }
+    command += "SAFE_CLI_BUILD_NUMBER=${env.BUILD_NUMBER} "
+    command += "make retrieve-all-build-artifacts"
+    sh(command)
+}
+
 def package_build_artifacts(os) {
     command = ""
     if (env.CHANGE_ID?.trim()) {
