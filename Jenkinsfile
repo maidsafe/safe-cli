@@ -57,8 +57,16 @@ def create_github_release() {
         usernameVariable: "GIT_USER",
         passwordVariable: "GIT_PASSWORD")]) {
         sh("git checkout -B ${BRANCH_NAME}")
-        sh("make tag")
+        create_tag()
     }
+}
+
+def create_tag() {
+    command = ""
+    command += "GIT_USER=$GIT_USER "
+    command += "GIT_PASSWORD=$GIT_PASSWORD "
+    command += "make tag"
+    sh(command)
 }
 
 def package_build_artifacts(os) {
