@@ -13,15 +13,15 @@ pub const CLI: &str = "safe";
 pub const SAFE_PROTOCOL: &str = "safe://";
 
 #[allow(dead_code)]
-pub fn get_bin_location() -> &'static str {
+pub fn get_bin_location() -> String {
     let target_dir = match env::var("CARGO_TARGET_DIR") {
         Ok(target_dir) => target_dir,
-        Err(e) => "./target".to_string()
+        Err(_) => "./target".to_string(),
     };
     if cfg!(debug_assertions) {
-        return format!("{}{}", target_dir, "/debug/safe_cli");
+        return format!("{}{}", target_dir, "/debug/safe");
     }
-    format!("{}{}", target_dir, "/release/safe_cli")
+    format!("{}{}", target_dir, "/release/safe")
 }
 
 #[allow(dead_code)]
@@ -44,7 +44,6 @@ pub fn create_preload_and_get_keys(preload: &str) -> (String, String) {
     let _pk = lines.next().unwrap();
     let sk_line = lines.next().unwrap();
     let sk = &sk_line["sk=".len()..];
-
     (pk_xor.to_string(), sk.to_string())
 }
 
