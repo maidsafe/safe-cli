@@ -24,7 +24,6 @@ pub fn get_bin_location() -> String {
     format!("{}{}", target_dir, "/release/safe")
 }
 
-#[allow(dead_code)]
 pub fn create_preload_and_get_keys(preload: &str) -> (String, String) {
     // KEY_FROM
     let pk_command_result = cmd!(
@@ -47,7 +46,6 @@ pub fn create_preload_and_get_keys(preload: &str) -> (String, String) {
     (pk_xor.to_string(), sk.to_string())
 }
 
-#[allow(dead_code)]
 pub fn create_wallet_with_balance(preload: &str) -> (String, String, String) {
     let (pk, sk) = create_preload_and_get_keys(&preload);
     let wallet_create_result = cmd!(
