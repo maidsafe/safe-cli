@@ -58,7 +58,7 @@ def create_github_release() {
         passwordVariable: "GIT_PASSWORD")]) {
         version = sh(
             returnStdout: true,
-            "grep '^version' < Cargo.toml | head -n 1 | awk '{ print $$3 }' | sed 's/\"//g'")
+            "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'")
         create_tag(version)
     }
 }
