@@ -59,19 +59,17 @@ def create_github_release() {
         version = sh(
             returnStdout: true,
             script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
-        echo("Creating tag for version ${version}")
         create_tag(version)
     }
 }
 
 def create_tag(version) {
-    echo("Creating tag for version ${version}")
     sh("""
         git checkout -B ${BRANCH_NAME}
-        git config user.name 'Maidsafe-QA'
-        git config user.email 'qa@maidsafe.net'
-        git tag -a ${version} -m 'Creating tag for ${version}'
-        git config --local credential.helper "!f() { echo username=\\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
+        git config user.name "Maidsafe-QA"
+        git config user.email "qa@maidsafe.net"
+        git tag -a ${version} -m "Creating tag for ${version}"
+        git config --local credential.helper "!f() { echo username=\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
         git push origin HEAD:${BRANCH_NAME}
     """)
 }
