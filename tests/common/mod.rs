@@ -5,6 +5,7 @@
 // under the GPL Licence is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
+
 use std::env;
 
 pub const CLI: &str = "safe";
@@ -15,12 +16,12 @@ pub const SAFE_PROTOCOL: &str = "safe://";
 pub fn get_bin_location() -> String {
     let target_dir = match env::var("CARGO_TARGET_DIR") {
         Ok(target_dir) => target_dir,
-        Err(e) => "./target".to_string()
+        Err(_) => "./target".to_string(),
     };
     if cfg!(debug_assertions) {
-        return format!("{}{}", target_dir, "/debug/safe_cli");
+        return format!("{}{}", target_dir, "/debug/safe");
     }
-    format!("{}{}", target_dir, "/release/safe_cli")
+    format!("{}{}", target_dir, "/release/safe")
 }
 
 pub fn create_preload_and_get_keys(preload: &str) -> (String, String) {
@@ -38,13 +39,10 @@ pub fn create_preload_and_get_keys(preload: &str) -> (String, String) {
 
     let mut lines = pk_command_result.lines();
     let pk_xor_line = lines.next().unwrap();
-    let pk_xor_eq = String::from("pk xor=");
-    let pk_xor = &pk_xor_line[pk_xor_eq.chars().count()..];
+    let pk_xor = &pk_xor_line["pk-xorurl=".len()..];
     let _pk = lines.next().unwrap();
     let sk_line = lines.next().unwrap();
-    let sk_eq = String::from("sk=");
-    let sk = &sk_line[sk_eq.chars().count()..];
-
+    let sk = &sk_line["sk=".len()..];
     (pk_xor.to_string(), sk.to_string())
 }
 
