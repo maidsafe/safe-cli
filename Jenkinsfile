@@ -70,7 +70,7 @@ def create_tag(version) {
         git checkout -B ${BRANCH_NAME}
         git config user.name 'Maidsafe-QA'
         git config user.email 'qa@maidsafe.net'
-        git tag -a ${version} -m "Creating tag for ${version}"
+        git tag -a ${version} -m 'Creating tag for ${version}'
         git config --local credential.helper "!f() { echo username=\\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
         git push origin HEAD:${BRANCH_NAME}
     ''')
