@@ -79,8 +79,16 @@ endif
 
 .ONESHELL:
 tag:
+ifndef GIT_USER
+	@echo "Please set GIT_USER to a build user who can push to the safe-cli repo."
+	@exit 1
+endif
+ifndef GIT_PASSWORD
+	@echo "Please set GIT_PASSWORD to the password of the build user who can push to the safe-cli repo."
+	@exit 1
+endif
 	git config user.name 'build-user'
 	git config user.email 'qa@maidsafe.net'
 	git tag -a ${SAFE_CLI_VERSION} -m "Creating tag for ${SAFE_CLI_VERSION}"
-	git config --local credential.helper "!f() { echo username=\\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
+	git config --local credential.helper "!f() { echo username=${GIT_USER}; echo password=${GIT_PASSWORD}; }; f"
 	git push origin HEAD:${BRANCH}
