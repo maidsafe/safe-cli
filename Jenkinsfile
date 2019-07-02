@@ -8,6 +8,10 @@ stage('build & test') {
     parallel linux: {
         node('docker') {
             checkout(scm)
+            version = sh(
+                returnStdout: true,
+                script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
+            echo("version = ${version}")
             sh("make test")
             package_build_artifacts('linux')
             upload_build_artifacts()
@@ -58,7 +62,7 @@ def create_github_release() {
         passwordVariable: "GIT_PASSWORD")]) {
         version = sh(
             returnStdout: true,
-            "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'")
+            script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
         create_tag(version)
     }
 }
