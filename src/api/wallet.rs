@@ -7,18 +7,18 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::helpers::{parse_coins_amount, sk_from_hex};
-use super::xorurl::{xorname_to_xorurl, xorurl_to_xorname, XorUrl};
-use super::{BlsKeyPair, Safe};
-use log::{debug, error};
+use super::xorurl::SafeContentType;
+use super::{BlsKeyPair, Safe, XorUrl, XorUrlEncoder};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use unwrap::unwrap;
 use uuid::Uuid;
 
 // Type tag used for the Wallet container
-static WALLET_TYPE_TAG: u64 = 10_000;
+const WALLET_TYPE_TAG: u64 = 10_000;
 
-static WALLET_DEFAULT: &str = "_default";
-static WALLET_DEFAULT_BYTES: &[u8] = b"_default";
+const WALLET_DEFAULT: &str = "_default";
+const WALLET_DEFAULT_BYTES: &[u8] = b"_default";
 
 // Struct which is serialised and stored in Wallet MD for linking to a spendable balance (Key)
 #[derive(Serialize, Deserialize, Debug)]
@@ -27,13 +27,19 @@ struct WalletSpendableBalance {
     pub sk: String,
 }
 
+#[allow(dead_code)]
 impl Safe {
     // Create an empty Wallet and return its XOR-URL
     pub fn wallet_create(&mut self) -> Result<XorUrl, String> {
         let xorname = self
             .safe_app
-            .put_seq_mutable_data(None, WALLET_TYPE_TAG, None);
-        xorname_to_xorurl(&xorname.unwrap(), &self.xorurl_base)
+            .put_seq_mutable_data(None, WALLET_TYPE_TAG, None)?;
+        XorUrlEncoder::encode(
+            xorname,
+            WALLET_TYPE_TAG,
+            SafeContentType::Wallet,
+            &self.xorurl_base,
+        )
     }
 
     // Add a Key to a Wallet to make it spendable
@@ -153,7 +159,7 @@ impl Safe {
     /// ```
     /// # use safe_cli::Safe;
     /// # use unwrap::unwrap;
-    /// let mut safe = Safe::new("base32".to_string());
+    /// let mut safe = Safe::new("base32z".to_string());
     /// let sk = String::from("391987fd429b4718a59b165b5799eaae2e56c697eb94670de8886f8fb7387058");
     /// let wallet_xorurl = unwrap!(safe.wallet_create());
     /// let wallet_xorurl2 = unwrap!(safe.wallet_create());
@@ -209,13 +215,13 @@ impl Safe {
         let from_wallet_balance = self.wallet_get_default_balance(&from_wallet_xorurl)?;
         let to_wallet_balance = self.wallet_get_default_balance(&to)?;
 
-        let from_pk = unwrap!(self
-            .safe_app
-            .fetch_pk_from_xorname(&xorurl_to_xorname(&from_wallet_balance.xorurl)?));
+        let from_pk = unwrap!(self.safe_app.fetch_pk_from_xorname(
+            &XorUrlEncoder::from_url(&from_wallet_balance.xorurl)?.xorname()
+        ));
 
         let to_pk = unwrap!(self
             .safe_app
-            .fetch_pk_from_xorname(&xorurl_to_xorname(&to_wallet_balance.xorurl)?));
+            .fetch_pk_from_xorname(&XorUrlEncoder::from_url(&to_wallet_balance.xorurl)?.xorname()));
 
         let from_sk = unwrap!(sk_from_hex(&from_wallet_balance.sk));
         let tx_id = Uuid::new_v4();
@@ -245,7 +251,7 @@ impl Safe {
 
 #[test]
 fn test_wallet_create() {
-    let mut safe = Safe::new("base32".to_string());
+    let mut safe = Safe::new("base32z".to_string());
     let xorurl = unwrap!(safe.wallet_create());
     assert!(xorurl.starts_with("safe://"));
 
@@ -256,7 +262,7 @@ fn test_wallet_create() {
 
 #[test]
 fn test_wallet_insert_and_balance() {
-    let mut safe = Safe::new("base32".to_string());
+    let mut safe = Safe::new("base32z".to_string());
     let sk = String::from("391987fd429b4718a59b165b5799eaae2e56c697eb94670de8886f8fb7387058");
     let wallet_xorurl = unwrap!(safe.wallet_create());
     let (key1_xorurl, key_pair1) =
@@ -290,7 +296,7 @@ fn test_wallet_insert_and_balance() {
 #[test]
 #[cfg(not(feature = "mock-network"))] // TODO: this is temporary until issue #82 is fixed
 fn test_wallet_transfer_no_default() {
-    let mut safe = Safe::new("base32".to_string());
+    let mut safe = Safe::new("base32z".to_string());
     let from_wallet_xorurl = unwrap!(safe.wallet_create()); // this one won't have a default balance
 
     let to_wallet_xorurl = unwrap!(safe.wallet_create()); // we'll insert a default balance
@@ -331,7 +337,7 @@ fn test_wallet_transfer_no_default() {
 
 #[test]
 fn test_wallet_transfer_diff_amounts() {
-    let mut safe = Safe::new("base32".to_string());
+    let mut safe = Safe::new("base32z".to_string());
     let from_wallet_xorurl = unwrap!(safe.wallet_create());
     let (key_xorurl1, key_pair1) =
         unwrap!(safe.keys_create_preload_test_coins("100.5".to_string(), None));

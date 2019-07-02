@@ -6,14 +6,11 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::xorurl::xorurl_to_xorname;
+use super::xorurl::create_random_xorname;
+use super::XorUrlEncoder;
 use crate::api::helpers::{parse_hex, vec_to_hex, xorname_from_pk, xorname_to_hex};
 use log::debug;
-use rand::rngs::OsRng;
-use rand_core::RngCore;
-use safe_nd::mutable_data::Value;
-use safe_nd::XorName;
-
+use safe_nd::{MDataValue, XorName};
 use safecoin::{Coins, NanoCoins};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -32,19 +29,20 @@ struct CoinBalance {
     value: String,
 }
 
-type AppendOnlyDataMock = BTreeMap<usize, Vec<u8>>;
+type AppendOnlyDataMock = Vec<(Vec<u8>, Vec<u8>)>;
 type TxStatusList = BTreeMap<String, String>;
 type XorNameStr = String;
-type SeqMutableDataMock = BTreeMap<String, Value>;
+type SeqMutableDataMock = BTreeMap<String, MDataValue>;
 
-static MOCK_FILE: &str = "./mock_data.txt";
+const MOCK_FILE: &str = "./mock_data.txt";
 
 #[derive(Default, Serialize, Deserialize)]
 struct MockData {
     coin_balances: BTreeMap<XorNameStr, CoinBalance>,
     txs: BTreeMap<XorNameStr, TxStatusList>, // keep track of TX status per tx ID, per xorname
-    unpublished_append_only: BTreeMap<XorNameStr, AppendOnlyDataMock>, // keep a versioned map of data per xorname
+    published_seq_append_only: BTreeMap<XorNameStr, AppendOnlyDataMock>, // keep a versioned map of data per xorname
     mutable_data: BTreeMap<XorNameStr, SeqMutableDataMock>,
+    published_immutable_data: BTreeMap<XorNameStr, Vec<u8>>,
 }
 
 pub struct SafeApp {
@@ -235,48 +233,84 @@ impl SafeApp {
         tx_state.to_string()
     }
 
-    #[allow(dead_code)]
-    pub fn unpublished_append_only_put(
-        &mut self,
-        pk: &PublicKeyMock,
-        _sk: &SecretKeyMock,
-        data: &[u8],
-    ) -> XorName {
-        let xorname = xorname_from_pk(pk);
-        let mut unpublished_append_only = match self
+    pub fn files_put_published_immutable(&mut self, data: &[u8]) -> Result<XorName, String> {
+        let xorname = create_random_xorname();
+        // TODO: hash to get xorname.
+        self.mock_data
+            .published_immutable_data
+            .insert(xorname_to_hex(&xorname), data.to_vec());
+
+        Ok(xorname)
+    }
+
+    pub fn files_get_published_immutable(&self, xorname: XorName) -> Result<Vec<u8>, String> {
+        let data = match self
             .mock_data
-            .unpublished_append_only
+            .published_immutable_data
             .get(&xorname_to_hex(&xorname))
         {
-            Some(uao) => uao.clone(),
-            None => BTreeMap::new(),
+            Some(data) => data.clone(),
+            None => return Err("No ImmutableData found at this address".to_string()),
         };
-        unpublished_append_only.insert(unpublished_append_only.len(), data.to_vec());
-        self.mock_data
-            .unpublished_append_only
-            .insert(xorname_to_hex(&xorname), unpublished_append_only);
 
-        xorname
+        Ok(data)
+    }
+
+    pub fn put_seq_appendable_data(
+        &mut self,
+        data: Vec<(Vec<u8>, Vec<u8>)>,
+        name: Option<XorName>,
+        _tag: u64,
+        _permissions: Option<String>,
+    ) -> Result<XorName, String> {
+        let xorname = name.unwrap_or_else(|| create_random_xorname());
+
+        self.mock_data
+            .published_seq_append_only
+            .insert(xorname_to_hex(&xorname), data);
+
+        Ok(xorname)
     }
 
     #[allow(dead_code)]
-    pub fn unpublished_append_only_get(
-        &self,
-        pk: &PublicKeyMock,
-        _sk: &SecretKeyMock,
-        version: Option<usize>,
-    ) -> Vec<u8> {
-        let xorname = xorname_from_pk(pk);
-        let unpublished_append_only =
-            &self.mock_data.unpublished_append_only[&xorname_to_hex(&xorname)];
-        let data = match version {
-            Some(version) => unwrap!(unpublished_append_only.get(&version)),
-            None => {
-                unwrap!(unpublished_append_only.get(&self.mock_data.unpublished_append_only.len()))
-            }
+    pub fn append_seq_appendable_data(
+        &mut self,
+        data: (Vec<u8>, Vec<u8>), // TODO: support appending more than one entry at a time
+        name: XorName,
+        _tag: u64,
+    ) -> Result<u64, String> {
+        let xorname_hex = xorname_to_hex(&name);
+        let mut seq_append_only = match self.mock_data.published_seq_append_only.get(&xorname_hex) {
+            Some(seq_append_only) => seq_append_only.clone(),
+            None => return Err("SeqAppendOnlyDataNotFound".to_string()),
         };
 
-        data.to_vec()
+        seq_append_only.push(data);
+        self.mock_data
+            .published_seq_append_only
+            .insert(xorname_hex, seq_append_only.to_vec());
+
+        Ok(self.mock_data.published_seq_append_only.len() as u64)
+    }
+
+    pub fn get_seq_appendable_latest(
+        &self,
+        name: XorName,
+        _tag: u64,
+    ) -> Result<(Vec<u8>, Vec<u8>), &str> {
+        let xorname_hex = xorname_to_hex(&name);
+        debug!("attempting to locate scl mock mdata: {:?}", xorname_hex);
+
+        match self.mock_data.published_seq_append_only.get(&xorname_hex) {
+            Some(seq_append_only) => {
+                let latest_index = seq_append_only.len() - 1;
+                let last_entry = seq_append_only
+                    .get(latest_index)
+                    .ok_or("SeqAppendOnlyDataEmpty")?;
+                Ok(last_entry.clone())
+            }
+            None => Err("SeqAppendOnlyDataNotFound"),
+        }
     }
 
     pub fn put_seq_mutable_data(
@@ -286,12 +320,7 @@ impl SafeApp {
         // _data: Option<String>,
         _permissions: Option<String>,
     ) -> Result<XorName, String> {
-        let xorname = name.unwrap_or_else(|| {
-            let mut os_rng = OsRng::new().unwrap();
-            let mut xorname = XorName::default();
-            os_rng.fill_bytes(&mut xorname.0);
-            xorname
-        });
+        let xorname = name.unwrap_or_else(|| create_random_xorname());
 
         let seq_md = match self.mock_data.mutable_data.get(&xorname_to_hex(&xorname)) {
             Some(uao) => uao.clone(),
@@ -324,12 +353,12 @@ impl SafeApp {
         key: Vec<u8>,
         value: &[u8],
     ) -> Result<(), String> {
-        let xorname = xorurl_to_xorname(xorurl)?;
-        let mut seq_md = self.get_seq_mdata(&xorname, tag)?;
+        let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
+        let mut seq_md = self.get_seq_mdata(&xorurl_encoder.xorname(), tag)?;
 
         seq_md.insert(
             vec_to_hex(key.to_vec()),
-            Value {
+            MDataValue {
                 data: value.to_vec(),
                 version: 0,
             },
@@ -337,7 +366,7 @@ impl SafeApp {
 
         self.mock_data
             .mutable_data
-            .insert(xorname_to_hex(&xorname), seq_md);
+            .insert(xorname_to_hex(&xorurl_encoder.xorname()), seq_md);
 
         Ok(())
     }
@@ -350,9 +379,9 @@ impl SafeApp {
         xorurl: &str,
         tag: u64,
         key: Vec<u8>,
-    ) -> Result<Value, String> {
-        let xorname = xorurl_to_xorname(xorurl)?;
-        let seq_md = self.get_seq_mdata(&xorname, tag)?;
+    ) -> Result<MDataValue, String> {
+        let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
+        let seq_md = self.get_seq_mdata(&xorurl_encoder.xorname(), tag)?;
         match seq_md.get(&vec_to_hex(key.to_vec())) {
             Some(value) => Ok(value.clone()),
             None => Err("EntryNotFound".to_string()),
@@ -363,10 +392,10 @@ impl SafeApp {
         &self,
         xorurl: &str,
         tag: u64,
-    ) -> Result<BTreeMap<Vec<u8>, Value>, String> {
+    ) -> Result<BTreeMap<Vec<u8>, MDataValue>, String> {
         debug!("Listing seq_mdata_entries for: {}", xorurl);
-        let xorname = xorurl_to_xorname(xorurl)?;
-        let seq_md = self.get_seq_mdata(&xorname, tag)?;
+        let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
+        let seq_md = self.get_seq_mdata(&xorurl_encoder.xorname(), tag)?;
 
         let mut res = BTreeMap::new();
         seq_md.iter().for_each(|elem| {
@@ -388,46 +417,6 @@ impl SafeApp {
     ) -> Result<(), String> {
         Ok(())
     }
-}
-
-#[test]
-fn test_unpublished_append_only_put() {
-    use self::SafeApp;
-    use threshold_crypto::SecretKey as SecretKeyMock;
-
-    let mut mock = SafeApp::new();
-
-    let sk = SecretKeyMock::random();
-    let pk = sk.public_key();
-    println!(
-        "New Unpublished AppendOnlyData at: {:?}",
-        mock.unpublished_append_only_put(&pk, &sk, &vec![])
-    );
-}
-
-#[test]
-fn test_unpublished_append_only_get() {
-    use self::SafeApp;
-    use threshold_crypto::SecretKey as SecretKeyMock;
-
-    let mut mock = SafeApp::new();
-
-    let sk = SecretKeyMock::random();
-    let pk = sk.public_key();
-    let data = vec![1, 2, 3];
-    println!(
-        "New Unpublished AppendOnlyData at: {:?}",
-        mock.unpublished_append_only_put(&pk, &sk, &data)
-    );
-
-    let curr_data = mock.unpublished_append_only_get(&pk, &sk, Some(0));
-
-    println!(
-        "Current data at Unpublished AppendOnlyData at: {:?}",
-        curr_data
-    );
-
-    assert_eq!(data, curr_data);
 }
 
 #[test]

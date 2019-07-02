@@ -11,9 +11,7 @@ use super::Safe;
 use log::{debug, info};
 use reqwest::get as httpget;
 use safe_app::AppError;
-use safe_core::ipc::{
-    decode_msg, encode_msg, gen_req_id, AppExchangeInfo, AuthReq, IpcMsg, IpcReq,
-};
+use safe_core::ipc::{encode_msg, gen_req_id, AppExchangeInfo, AuthReq, IpcMsg, IpcReq};
 use safe_nd::AppPermissions;
 use std::collections::HashMap;
 use std::io::Read;
@@ -21,6 +19,7 @@ use std::io::Read;
 // Default URL where to send a GET request to the authenticator webservice for authorising a SAFE app
 const SAFE_AUTH_WEBSERVICE_BASE_URL: &str = "http://localhost:41805/authorise/";
 
+#[allow(dead_code)]
 impl Safe {
     // Generate an authorisation request string and send it to a SAFE Authenticator.
     // Ir returns the credentials necessary to connect to the network, encoded in a single string.

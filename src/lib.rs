@@ -8,4 +8,4 @@
 
 mod api;
 
-pub use api::{BlsKeyPair, Safe, XorUrl};
+pub use api::*;
