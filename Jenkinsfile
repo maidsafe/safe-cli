@@ -56,17 +56,22 @@ def create_github_release() {
         credentialsId: "github_maidsafe_qa_user_credentials",
         usernameVariable: "GIT_USER",
         passwordVariable: "GIT_PASSWORD")]) {
-        sh("git checkout -B ${BRANCH_NAME}")
-        create_tag()
+        version = sh(
+            returnStdout: true,
+            "grep '^version' < Cargo.toml | head -n 1 | awk '{ print $$3 }' | sed 's/\"//g'")
+        create_tag(version)
     }
 }
 
-def create_tag() {
-    command = ""
-    command += "GIT_USER=$GIT_USER "
-    command += "GIT_PASSWORD=$GIT_PASSWORD "
-    command += "make tag"
-    sh(command)
+def create_tag(version) {
+    sh('''
+        git checkout -B ${BRANCH_NAME}
+        git config user.name 'build-user'
+        git config user.email 'qa@maidsafe.net'
+        git tag -a ${version} -m "Creating tag for ${version}"
+        git config --local credential.helper "!f() { echo username=\\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
+        git push origin HEAD:${BRANCH_NAME}
+    ''')
 }
 
 def package_build_artifacts(os) {
