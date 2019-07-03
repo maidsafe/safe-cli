@@ -14,3 +14,40 @@ build-container:
 
 push-container:
 	docker push maidsafe/safe-cli-build:${SAFE_CLI_VERSION}
+
+test:
+	rm -rf artifacts
+	mkdir artifacts
+ifeq ($(UNAME_S),Linux)
+	docker run --name "safe-cli-build-${UUID}" -v "${PWD}":/usr/src/safe-cli:Z \
+		-u ${USER_ID}:${GROUP_ID} \
+		maidsafe/safe-cli-build:${SAFE_CLI_VERSION} \
+		/bin/bash -c "cargo test --release --features=scl-mock -- --test-threads=1"
+	docker cp "safe-cli-build-${UUID}":/target .
+	docker rm "safe-cli-build-${UUID}"
+else
+	cargo check --release
+	cargo test --release --features=scl-mock -- --test-threads=1
+endif
+	find target/release -maxdepth 1 -type f -exec cp '{}' artifacts \;
+
+package-build-artifacts:
+ifndef SAFE_CLI_BRANCH
+	@echo "A branch or PR reference must be provided."
+	@echo "Please set SAFE_CLI_BRANCH to a valid branch or PR reference."
+	@exit 1
+endif
+ifndef SAFE_CLI_BUILD_NUMBER
+	@echo "A build number must be supplied for build artifact packaging."
+	@echo "Please set SAFE_CLI_BUILD_NUMBER to a valid build number."
+	@exit 1
+endif
+ifndef SAFE_CLI_BUILD_OS
+	@echo "A value must be supplied for SAFE_CLI_BUILD_OS."
+	@echo "Valid values are 'linux' or 'windows' or 'macos'."
+	@exit 1
+endif
+	$(eval ARCHIVE_NAME := ${SAFE_CLI_BRANCH}-${SAFE_CLI_BUILD_NUMBER}-safe_cli-${SAFE_CLI_BUILD_OS}-x86_64.tar.gz)
+	tar -C artifacts -zcvf ${ARCHIVE_NAME} .
+	rm artifacts/**
+	mv ${ARCHIVE_NAME} artifacts
