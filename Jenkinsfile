@@ -34,8 +34,8 @@ stage('build & test') {
 stage('deploy') {
     node('docker') {
         checkout(scm)
+        create_tag()
         retrieve_build_artifacts()
-        create_github_release()
     }
 }
 
@@ -51,27 +51,28 @@ def retrieve_build_artifacts() {
     sh(command)
 }
 
-def create_github_release() {
-    withCredentials([usernamePassword(
-        credentialsId: "github_maidsafe_qa_user_credentials",
-        usernameVariable: "GIT_USER",
-        passwordVariable: "GIT_PASSWORD")]) {
-        version = sh(
-            returnStdout: true,
-            script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
-        create_tag(version)
+def create_tag() {
+    try {
+        withCredentials([usernamePassword(
+            credentialsId: "github_maidsafe_qa_user_credentials",
+            usernameVariable: "GIT_USER",
+            passwordVariable: "GIT_PASSWORD")]) {
+            version = sh(
+                returnStdout: true,
+                script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
+            sh("git config --global user.name \$GIT_USER")
+            sh("git config --global user.email qa@maidsafe.net")
+            sh("git config credential.username \$GIT_USER")
+            sh("git config credential.helper '!f() { echo password=\$GIT_PASSWORD; }; f'")
+            sh("git tag -a ${version} -m 'Creating tag for ${version}'")
+            sh("GIT_ASKPASS=true git push origin --tags --verbose")
+        }
+    } finally {
+        sh("git config --global --unset user.name")
+        sh("git config --global --unset user.email")
+        sh("git config --unset credential.username")
+        sh("git config --unset credential.helper")
     }
-}
-
-def create_tag(version) {
-    sh("""
-        git checkout -B ${BRANCH_NAME}
-        git config user.name "Maidsafe-QA"
-        git config user.email "qa@maidsafe.net"
-        git tag -a ${version} -m "Creating tag for ${version}"
-        git config --local credential.helper "!f() { echo username=\$GIT_USER; echo password=\\$GIT_PASSWORD; }; f"
-        git push origin HEAD:${BRANCH_NAME}
-    """)
 }
 
 def package_build_artifacts(os) {
