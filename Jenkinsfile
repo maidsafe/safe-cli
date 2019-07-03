@@ -33,19 +33,14 @@ stage('build & test') {
 
 stage('deploy') {
     node('docker') {
-        checkout([
-            $class: 'GitSCM',
-            branches: scm.branches,
-            doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
-            extensions: scm.extensions + [[$class: 'CloneOption', noTags: false, reference: '', shallow: true]],
-            submoduleCfg: [],
-            userRemoteConfigs: scm.userRemoteConfigs])
+        checkout(scm)
         tag_current_version()
         retrieve_build_artifacts()
     }
 }
 
 def tag_current_version() {
+    sh("git fetch --tags --force")
     if (tag_exists(version)) {
         delete_tag(version)
     }
