@@ -48,12 +48,16 @@ def create_tag() {
             version = sh(
                 returnStdout: true,
                 script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
-            sh("git config --global user.name \$GIT_USER")
-            sh("git config --global user.email qa@maidsafe.net")
-            sh("git config credential.username \$GIT_USER")
-            sh("git config credential.helper '!f() { echo password=\$GIT_PASSWORD; }; f'")
-            sh("git tag -a ${version} -m 'Creating tag for ${version}'")
-            sh("GIT_ASKPASS=true git push origin --tags --verbose")
+            if (!tag_exists(version)) {
+                sh("git config --global user.name \$GIT_USER")
+                sh("git config --global user.email qa@maidsafe.net")
+                sh("git config credential.username \$GIT_USER")
+                sh("git config credential.helper '!f() { echo password=\$GIT_PASSWORD; }; f'")
+                sh("git tag -a ${version} -m 'Creating tag for ${version}'")
+                sh("GIT_ASKPASS=true git push origin --tags --verbose")
+            } else {
+                echo("A tag already exists for ${version}")
+            }
         }
     } finally {
         sh("git config --global --unset user.name")
@@ -61,6 +65,11 @@ def create_tag() {
         sh("git config --unset credential.username")
         sh("git config --unset credential.helper")
     }
+}
+
+def tag_exists(version) {
+    tags = sh(returnStdout: true, script: "git tag").trim().split("\\r?\\n")
+    return tags.contains(version)
 }
 
 def retrieve_build_artifacts() {
