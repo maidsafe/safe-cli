@@ -9,8 +9,8 @@ S3_BUCKET := safe-jenkins-build-artifacts
 
 build-container:
 	rm -rf target/
-	docker rmi -f maidsafe/safe-cli-build:0.0.2
-	docker build -f Dockerfile.build -t maidsafe/safe-cli-build:0.0.2 .
+	docker rmi -f maidsafe/safe-cli-build:${SAFE_CLI_VERSION}
+	docker build -f Dockerfile.build -t maidsafe/safe-cli-build:${SAFE_CLI_VERSION} .
 
 push-container:
 	docker push maidsafe/safe-cli-build:${SAFE_CLI_VERSION}
