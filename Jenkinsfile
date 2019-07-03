@@ -33,7 +33,13 @@ stage('build & test') {
 
 stage('deploy') {
     node('docker') {
-        checkout(scm)
+        checkout([
+            $class: 'GitSCM',
+            branches: scm.branches,
+            doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
+            extensions: scm.extensions + [[$class: 'CloneOption', noTags: false, reference: '', shallow: true]],
+            submoduleCfg: [],
+            userRemoteConfigs: scm.userRemoteConfigs])
         tag_current_version()
         retrieve_build_artifacts()
     }
