@@ -40,6 +40,9 @@ stage('deploy') {
 }
 
 def tag_current_version() {
+    version = sh(
+        returnStdout: true,
+        script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
     sh("git fetch --tags --force")
     if (tag_exists(version)) {
         delete_tag(version)
