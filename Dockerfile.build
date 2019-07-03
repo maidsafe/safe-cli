@@ -14,7 +14,7 @@ RUN USER=maidsafe && \
     chown root:root /usr/local/bin/fixuid && \
     chmod 4755 /usr/local/bin/fixuid && \
     mkdir -p /etc/fixuid && \
-    printf "user: $USER\ngroup: $GROUP\npaths:\n  - /usr/src/safe-cli" > /etc/fixuid/config.yml
+    printf "user: $USER\ngroup: $GROUP\n" > /etc/fixuid/config.yml
 
 RUN apt-get update -y && \
     mkdir /target && \
