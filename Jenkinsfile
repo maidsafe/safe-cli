@@ -7,7 +7,13 @@ properties([
 stage('build & test') {
     parallel linux: {
         node('docker') {
-            checkout(scm)
+            checkout([
+                $class: 'GitSCM',
+                branches: scm.branches,
+                doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
+                extensions: scm.extensions + [[$class: 'CloneOption', noTags: false, reference: '', shallow: true]],
+                submoduleCfg: [],
+                userRemoteConfigs: scm.userRemoteConfigs])
             sh("make test")
             package_build_artifacts('linux')
             upload_build_artifacts()
