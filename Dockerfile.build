@@ -21,8 +21,6 @@ RUN apt-get update -y && \
     chown maidsafe:maidsafe /target && \
     mkdir /usr/src/safe-cli && \
     chown maidsafe:maidsafe /usr/src/safe-cli && \
-    cd /tmp && curl -SsLO https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2 && \
-    tar -C /usr/bin -xvf linux-amd64-github-release.tar.bz2 --strip=3 && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
