@@ -7,13 +7,7 @@ properties([
 stage('build & test') {
     parallel linux: {
         node('docker') {
-            checkout([
-                $class: 'GitSCM',
-                branches: scm.branches,
-                doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
-                extensions: scm.extensions + [[$class: 'CloneOption', noTags: false, reference: '', shallow: true]],
-                submoduleCfg: [],
-                userRemoteConfigs: scm.userRemoteConfigs])
+            checkout(scm)
             sh("make test")
             package_build_artifacts('linux')
             upload_build_artifacts()
@@ -39,13 +33,8 @@ stage('build & test') {
 
 stage('deploy') {
     node('docker') {
-        checkout([
-            $class: 'GitSCM',
-            branches: scm.branches,
-            doGenerateSubmoduleConfigurations: scm.doGenerateSubmoduleConfigurations,
-            extensions: scm.extensions + [[$class: 'CloneOption', noTags: false, reference: '', shallow: true]],
-            submoduleCfg: [],
-            userRemoteConfigs: scm.userRemoteConfigs])
+        checkout(scm)
+        sh("git fetch --tags --force")
         retrieve_build_artifacts()
         if (version_change_commit()) {
             version = sh(
