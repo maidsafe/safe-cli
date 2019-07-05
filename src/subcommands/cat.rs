@@ -6,41 +6,88 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::helpers::get_target_location;
+use super::helpers::{get_target_location, xorname_to_hex};
 use super::OutputFmt;
 use prettytable::Table;
 use safe_cli::{Safe, SafeData};
+use structopt::StructOpt;
 
-pub fn cat_command(
+#[derive(StructOpt, Debug)]
+pub struct CatCommands {
+    /// The safe:// location to retrieve
     location: Option<String>,
-    _version: Option<String>,
+    /// Version of the resource to retrieve
+    #[structopt(long = "version")]
+    version: Option<String>,
+    /// Display additional information about the content being retrieved
+    #[structopt(short = "i", long = "info")]
+    info: bool,
+}
+
+pub fn cat_commander(
+    cmd: CatCommands,
     output_fmt: OutputFmt,
     safe: &mut Safe,
 ) -> Result<(), String> {
     // TODO: Get specific versions.
-    let xorurl = get_target_location(location)?;
+    let xorurl = get_target_location(cmd.location)?;
     let content = safe.fetch(&xorurl)?;
     match content {
-        SafeData::FilesContainer { files_map, .. } => {
+        SafeData::FilesContainer {
+            version,
+            files_map,
+            type_tag,
+            xorname,
+            native_type,
+        } => {
             // Render FilesContainer
             if OutputFmt::Pretty == output_fmt {
+                if cmd.info {
+                    println!("Native data type: {}", native_type);
+                    println!("Type tag: {}", type_tag,);
+                    println!("XOR name: 0x{}", xorname_to_hex(&xorname));
+                    println!();
+                }
+
+                println!(
+                    "Files of FilesContainer (version {}) at \"{}\":",
+                    version, xorurl
+                );
                 let mut table = Table::new();
-                println!("Files of FilesContainer at: \"{}\"", xorurl);
-                table.add_row(row![bFg->"Name", bFg->"Size", bFg->"Created", bFg->"Link"]);
+                table.add_row(
+                    row![bFg->"Name", bFg->"Size", bFg->"Created", bFg->"Modified", bFg->"Link"],
+                );
                 files_map.iter().for_each(|(name, file_item)| {
                     table.add_row(row![
                         name,
                         file_item["size"],
                         file_item["created"],
+                        file_item["modified"],
                         file_item["link"],
                     ]);
                 });
                 table.printstd();
+            } else if cmd.info {
+                println!(
+                        "[{}, {{ \"native_type\": \"{}\", \"type_tag\": \"{}\", \"xorname\": \"{}\" }}, {:?}]",
+                        xorurl,
+                        native_type,
+                        type_tag,
+                        xorname_to_hex(&xorname),
+                        files_map
+                    );
             } else {
                 println!("[{}, {:?}]", xorurl, files_map);
             }
         }
-        SafeData::ImmutableData { data, .. } => {
+        SafeData::ImmutableData { data, xorname } => {
+            if cmd.info {
+                println!("Native data type: ImmutableData (published)");
+                println!("XOR name: 0x{}", xorname_to_hex(&xorname));
+                println!();
+                println!("Raw content of the file:");
+            }
+
             // Render ImmutableData file
             let data_string = match String::from_utf8(data) {
                 Ok(string) => string,
@@ -51,7 +98,7 @@ pub fn cat_command(
             println!("{}", data_string);
         }
         other => println!(
-            "Content type '{:?}' not supported yet by cat command",
+            "Content type '{:?}' not supported yet by 'cat' command",
             other
         ),
     }
