@@ -34,21 +34,24 @@ stage('build & test') {
 
 stage('deploy') {
     node('docker') {
-        checkout(scm)
-        sh("git fetch --tags --force")
-        retrieve_build_artifacts()
-        if (version_change_commit()) {
-            version = sh(
-                returnStdout: true,
-                script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
-            package_artifacts_for_deploy(true)
-            create_tag(version)
-            create_github_release(version)
+        if (env.BRANCH_NAME == "master") {
+            checkout(scm)
+            sh("git fetch --tags --force")
+            retrieve_build_artifacts()
+            if (version_change_commit()) {
+                version = sh(
+                    returnStdout: true,
+                    script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
+                package_artifacts_for_deploy(true)
+                create_tag(version)
+                create_github_release(version)
+            } else {
+                package_artifacts_for_deploy(false)
+                upload_deploy_artifacts()
+            }
         } else {
-            package_artifacts_for_deploy(false)
-            upload_deploy_artifacts()
+            echo("${env.BRANCH_NAME} does not match the deployment branch. Nothing to do.")
         }
-    }
 }
 
 def version_change_commit() {
