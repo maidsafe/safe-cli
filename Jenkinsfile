@@ -52,6 +52,7 @@ stage('deploy') {
         } else {
             echo("${env.BRANCH_NAME} does not match the deployment branch. Nothing to do.")
         }
+    }
 }
 
 def versionChangeCommit() {
