@@ -106,25 +106,25 @@ ifndef GITHUB_TOKEN
 endif
 	github-release release \
 		--user maidsafe \
-		--repo jenkins_sample_lib \
+		--repo safe-cli \
 		--tag ${SAFE_CLI_VERSION} \
-		--name "jenkins_sample_lib" \
-		--description "Sample release";
+		--name "safe-cli" \
+		--description "Command line interface for the SAFE Network";
 	github-release upload \
 		--user maidsafe \
-		--repo jenkins_sample_lib \
+		--repo safe-cli \
 		--tag ${SAFE_CLI_VERSION} \
 		--name "safe_cli-linux-${SAFE_CLI_VERSION}-x86_64.tar" \
-		--file safe_cli-linux-${SAFE_CLI_VERSION}-x86_64.tar;
+		--file deploy/safe_cli-linux-${SAFE_CLI_VERSION}-x86_64.tar;
 	github-release upload \
 		--user maidsafe \
-		--repo jenkins_sample_lib \
+		--repo safe-cli \
 		--tag ${SAFE_CLI_VERSION} \
 		--name "safe_cli-win-${SAFE_CLI_VERSION}-x86_64.tar" \
-		--file safe_cli-win-${SAFE_CLI_VERSION}-x86_64.tar;
+		--file deploy/safe_cli-win-${SAFE_CLI_VERSION}-x86_64.tar;
 	github-release upload \
 		--user maidsafe \
-		--repo jenkins_sample_lib \
+		--repo safe-cli \
 		--tag ${SAFE_CLI_VERSION} \
 		--name "safe_cli-macos-${SAFE_CLI_VERSION}-x86_64.tar" \
-		--file safe_cli-macos-${SAFE_CLI_VERSION}-x86_64.tar;
+		--file deploy/safe_cli-macos-${SAFE_CLI_VERSION}-x86_64.tar;
