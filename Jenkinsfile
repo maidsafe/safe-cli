@@ -10,24 +10,24 @@ stage('build & test') {
         node('docker') {
             checkout(scm)
             sh("make test")
-            package_build_artifacts('linux')
-            upload_build_artifacts()
+            packageBuildArtifacts('linux')
+            uploadBuildArtifacts()
         }
     },
     windows: {
         node('windows') {
             checkout(scm)
             sh("make test")
-            package_build_artifacts('windows')
-            upload_build_artifacts()
+            packageBuildArtifacts('windows')
+            uploadBuildArtifacts()
         }
     },
     macos: {
         node('osx') {
             checkout(scm)
             sh("make test")
-            package_build_artifacts('macos')
-            upload_build_artifacts()
+            packageBuildArtifacts('macos')
+            uploadBuildArtifacts()
         }
     }
 }
@@ -37,42 +37,42 @@ stage('deploy') {
         if (env.BRANCH_NAME == "master") {
             checkout(scm)
             sh("git fetch --tags --force")
-            retrieve_build_artifacts()
-            if (version_change_commit()) {
+            retrieveBuildArtifacts()
+            if (versionChangeCommit()) {
                 version = sh(
                     returnStdout: true,
                     script: "grep '^version' < Cargo.toml | head -n 1 | awk '{ print \$3 }' | sed 's/\"//g'").trim()
-                package_artifacts_for_deploy(true)
-                create_tag(version)
-                create_github_release(version)
+                packageArtifactsForDeploy(true)
+                createTag(version)
+                createGithubRelease(version)
             } else {
-                package_artifacts_for_deploy(false)
-                upload_deploy_artifacts()
+                packageArtifactsForDeploy(false)
+                uploadDeployArtifacts()
             }
         } else {
             echo("${env.BRANCH_NAME} does not match the deployment branch. Nothing to do.")
         }
 }
 
-def version_change_commit() {
-    short_commit_hash = sh(
+def versionChangeCommit() {
+    shortCommitHash = sh(
         returnStdout: true,
         script: "git log -n 1 --pretty=format:'%h'").trim()
     message = sh(
         returnStdout: true,
-        script: "git log --format=%B -n 1 ${short_commit_hash}").trim()
+        script: "git log --format=%B -n 1 ${shortCommitHash}").trim()
     return message.startsWith("Version change")
 }
 
-def package_artifacts_for_deploy(version_commit) {
-    if (version_commit) {
+def packageArtifactsForDeploy(isVersionCommit) {
+    if (isVersionCommit) {
         sh("make package-version-artifacts-for-deploy")
     } else {
         sh("make package-commit_hash-artifacts-for-deploy")
     }
 }
 
-def create_tag(version) {
+def createTag(version) {
     withCredentials([usernamePassword(
         credentialsId: "github_maidsafe_qa_user_credentials",
         usernameVariable: "GIT_USER",
@@ -86,7 +86,7 @@ def create_tag(version) {
     }
 }
 
-def create_github_release(version) {
+def createGithubRelease(version) {
     withCredentials([usernamePassword(
         credentialsId: "github_maidsafe_token_credentials",
         usernameVariable: "GITHUB_USER",
@@ -95,7 +95,7 @@ def create_github_release(version) {
     }
 }
 
-def retrieve_build_artifacts() {
+def retrieveBuildArtifacts() {
     command = ""
     if (env.CHANGE_ID?.trim()) {
         command += "SAFE_CLI_BRANCH=${env.CHANGE_ID} "
@@ -107,7 +107,7 @@ def retrieve_build_artifacts() {
     sh(command)
 }
 
-def package_build_artifacts(os) {
+def packageBuildArtifacts(os) {
     command = ""
     if (env.CHANGE_ID?.trim()) {
         command += "SAFE_CLI_BRANCH=${env.CHANGE_ID} "
@@ -120,7 +120,7 @@ def package_build_artifacts(os) {
     sh(command)
 }
 
-def upload_build_artifacts() {
+def uploadBuildArtifacts() {
     withAWS(credentials: 'aws_jenkins_build_artifacts_user', region: 'eu-west-2') {
         def artifacts = sh(returnStdout: true, script: 'ls -1 artifacts').trim().split("\\r?\\n")
         for (artifact in artifacts) {
@@ -133,7 +133,7 @@ def upload_build_artifacts() {
     }
 }
 
-def upload_deploy_artifacts() {
+def uploadDeployArtifacts() {
     withAWS(credentials: 'aws_jenkins_deploy_artifacts_user', region: 'eu-west-2') {
         def artifacts = sh(returnStdout: true, script: 'ls -1 deploy').trim().split("\\r?\\n")
         for (artifact in artifacts) {
