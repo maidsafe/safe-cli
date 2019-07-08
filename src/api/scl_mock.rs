@@ -274,7 +274,8 @@ impl SafeApp {
 
     pub fn append_seq_appendable_data(
         &mut self,
-        data: (Vec<u8>, Vec<u8>), // TODO: support appending more than one entry at a time
+        data: Vec<(Vec<u8>, Vec<u8>)>, // TODO: support appending more than one entry at a time
+        _new_version: u64,
         name: XorName,
         _tag: u64,
     ) -> Result<u64, String> {
@@ -284,7 +285,7 @@ impl SafeApp {
             None => return Err("SeqAppendOnlyDataNotFound".to_string()),
         };
 
-        seq_append_only.push(data);
+        seq_append_only.extend(data);
         self.mock_data
             .published_seq_append_only
             .insert(xorname_hex, seq_append_only.to_vec());
@@ -292,7 +293,7 @@ impl SafeApp {
         Ok(seq_append_only.len() as u64)
     }
 
-    pub fn get_seq_appendable_latest(
+    pub fn get_latest_seq_appendable_data(
         &self,
         name: XorName,
         _tag: u64,
@@ -311,6 +312,26 @@ impl SafeApp {
             None => Err("SeqAppendOnlyDataNotFound"),
         }
     }
+
+
+    pub fn get_current_seq_appendable_data_version(
+        &self,
+        name: XorName,
+        tag: u64,
+    ) -> Result<u64, String> {
+        debug!("Getting seq appendable data, length for: {:?}", name);
+
+		let xorname_hex = xorname_to_hex(&name);
+
+		let length = match self.mock_data.published_seq_append_only.get(&xorname_hex) {
+			Some(seq_append_only) => seq_append_only.len(),
+			None => return Err("SeqAppendOnlyDataNotFound".to_string()),
+		};
+
+		//version
+		Ok( length as u64 + 1 )
+    }
+
 
     pub fn put_seq_mutable_data(
         &mut self,

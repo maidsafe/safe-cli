@@ -94,9 +94,14 @@ impl Safe {
         xorurl: &str,
     ) -> Result<(u64, FilesMap, String), String> {
         let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
+
+        let empty_data = "SeqAppendOnlyDataEmpty".to_string();
+        let data_not_found = "SeqAppendOnlyDataNotFound".to_string();
+        let not_found_err = Err("No FilesContainer found at this address".to_string());
+
         match self
             .safe_app
-            .get_seq_appendable_latest(xorurl_encoder.xorname(), FILES_CONTAINER_TYPE_TAG)
+            .get_latest_seq_appendable_data(xorurl_encoder.xorname(), FILES_CONTAINER_TYPE_TAG)
         {
             Ok((version, (_key, value))) => {
                 // TODO: use RDF format and deserialise it
@@ -109,14 +114,14 @@ impl Safe {
                 })?;
                 Ok((version, files_map, FILES_CONTAINER_NATIVE_TYPE.to_string()))
             }
-            Err("SeqAppendOnlyDataEmpty") => Ok((
+            Err(empty_data) => Ok((
                 0,
                 FilesMap::default(),
                 FILES_CONTAINER_NATIVE_TYPE.to_string(),
             )),
-            Err("SeqAppendOnlyDataNotFound") | Err(_) => {
-                Err("No FilesContainer found at this address".to_string())
-            }
+            // was getting a not bound error here below after returning String errors as standard...
+            Err(data_not_found) => not_found_err,
+            Err(_) => not_found_err,
         }
     }
 
@@ -146,16 +151,20 @@ impl Safe {
             let serialised_files_map = serde_json::to_string(&new_files_map)
                 .map_err(|err| format!("Couldn't serialise the FilesMap generated: {:?}", err))?;
             let now = gen_timestamp();
-            let files_container_data = (
+            let files_container_data = vec![(
                 now.into_bytes().to_vec(),
                 serialised_files_map.as_bytes().to_vec(),
-            );
+            )];
 
             let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
+			let xorname = xorurl_encoder.xorname();
+			let type_tag = xorurl_encoder.type_tag();
 
-            // Append new entry in the FilesContainer, which is a Published AppendOnlyData
+			let current_version = self.safe_app.get_current_seq_appendable_data_version( xorname , type_tag ).unwrap();
+
             version = self.safe_app.append_seq_appendable_data(
                 files_container_data,
+                current_version + 1,
                 xorurl_encoder.xorname(),
                 xorurl_encoder.type_tag(),
             )?;
@@ -164,13 +173,6 @@ impl Safe {
         Ok((version, content_map))
     }
 
-    // TODO:
-    // Upload files as ImmutableData
-    // Check if file or dir
-    // if dir, grab and do many.
-    // upload individual file
-    // get file metadata?
-    // if not now... when?
 
     /// # Put Published ImmutableData
     /// Put data blobs onto the network.
