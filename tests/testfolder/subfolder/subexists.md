@@ -1,1 +1,2 @@
-the sub
+the subA new line!
+A new line!
