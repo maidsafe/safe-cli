@@ -12,6 +12,7 @@ use futures::future::Future;
 use log::{debug, warn};
 use rand::rngs::OsRng;
 use rand_core::RngCore;
+use safe_app::AppError::CoreError;
 use safe_app::{run, App};
 
 #[cfg(feature = "fake-auth")]
@@ -119,7 +120,7 @@ impl SafeApp {
         //     let owner_wallet = XorName(sha3_256(&unwrap!(client.owner_key()).0));
         //
         //     client.get_balance(owner_wallet)
-        // 		.map_err(|e| panic!("Failed to get balance: {:?}", e))
+        // 		.map_err(|e| format!("Failed to get balance: {:?}", e))
         //
         // 	// .then(move |res| {
         //     //     match res {
@@ -127,7 +128,7 @@ impl SafeApp {
         //     //             println!("No permissions to access owner's wallet");
         //     //             ()
         //     //         }
-        //     //         res => panic!("Unexpected result: {:?}", res),
+        //     //         res => format!("Unexpected result: {:?}", res),
         //     //     }
         // 	//
         //     //     Ok::<_, AppError>(())
@@ -175,11 +176,10 @@ impl SafeApp {
 
         let the_idata = ImmutableData::new(data.to_vec());
         let return_idata = the_idata.clone();
-        unwrap!(run(safe_app, move |client, _app_context| {
-            client
-                .put_idata(the_idata)
-                .map_err(|e| panic!("Failed to PUT Published ImmutableData: {:?}", e))
-        }));
+        run(safe_app, move |client, _app_context| {
+            client.put_idata(the_idata).map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to PUT Published ImmutableData: {:?}", e))?;
 
         Ok(*return_idata.name())
     }
@@ -190,11 +190,10 @@ impl SafeApp {
             None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
-        let data = unwrap!(run(safe_app, move |client, _app_context| {
-            client
-                .get_idata(xorname)
-                .map_err(|e| panic!("Failed to GET Published ImmutableData: {:?}", e))
-        }));
+        let data = run(safe_app, move |client, _app_context| {
+            client.get_idata(xorname).map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to GET Published ImmutableData: {:?}", e))?;
 
         Ok(data.value().to_vec())
     }
@@ -213,7 +212,7 @@ impl SafeApp {
 
         let xorname = name.unwrap_or_else(create_random_xorname);
 
-        unwrap!(run(safe_app, move |client, _app_context| {
+        run(safe_app, move |client, _app_context| {
             let appendable_data_address = ADataAddress::new_pub_seq(xorname, tag);
             let append_client = client.clone();
 
@@ -245,10 +244,11 @@ impl SafeApp {
             client
                 .put_adata(AData::PubSeq(data.clone()))
                 .and_then(move |_| append_client.append_seq_adata(append, 0))
-                .map_err(|e| panic!("Failed to PUT Sequenced Appendable Data: {:?}", e))
+                .map_err(|err| CoreError(err))
                 .map(move |_| xorname)
-        }));
-        Ok(xorname)
+        })
+        .map_err(|e| format!("Failed to PUT Sequenced Appendable Data: {:?}", e))
+        // Ok(xorname)
     }
 
     pub fn append_seq_appendable_data(
@@ -263,7 +263,7 @@ impl SafeApp {
             None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
-        unwrap!(run(safe_app, move |client, _app_context| {
+        run(safe_app, move |client, _app_context| {
             let appendable_data_address = ADataAddress::new_pub_seq(xorname, tag);
 
             let append = ADataAppend {
@@ -273,9 +273,10 @@ impl SafeApp {
 
             client
                 .append_seq_adata(append, new_version)
-                .map_err(|e| panic!("Failed to UPDATE Sequenced Appendable Data: {:?}", e))
-                .map(move |_| xorname)
-        }));
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to UPDATE Sequenced Appendable Data: {:?}", e))?;
+
         Ok(new_version)
     }
 
@@ -283,10 +284,10 @@ impl SafeApp {
         &self,
         xorname: XorName,
         tag: u64,
-    ) -> Result<(u64, (Vec<u8>, Vec<u8>)), &str> {
+    ) -> Result<(u64, (Vec<u8>, Vec<u8>)), String> {
         let safe_app: &App = match &self.safe_conn {
             Some(app) => &app,
-            None => return Err(APP_NOT_CONNECTED),
+            None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
         let appendable_data_address = ADataAddress::new_pub_seq(xorname, tag);
@@ -295,11 +296,12 @@ impl SafeApp {
             .get_current_seq_appendable_data_version(xorname, tag)
             .unwrap();
 
-        let data = unwrap!(run(safe_app, move |client, _app_context| {
+        let data = run(safe_app, move |client, _app_context| {
             client
                 .get_adata_last_entry(appendable_data_address)
-                .map_err(|e| panic!("Failed to get Sequenced Appendable Data: {:?}", e))
-        }));
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to get Sequenced Appendable Data: {:?}", e))?;
 
         Ok((data_length, data))
     }
@@ -308,26 +310,27 @@ impl SafeApp {
         &self,
         name: XorName,
         tag: u64,
-    ) -> Result<u64, &str> {
+    ) -> Result<u64, String> {
         debug!("Getting seq appendable data, length for: {:?}", name);
 
         let safe_app: &App = match &self.safe_conn {
             Some(app) => &app,
-            None => return Err(APP_NOT_CONNECTED),
+            None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
         let appendable_data_address = ADataAddress::new_pub_seq(name, tag);
 
-        let data_length = unwrap!(run(safe_app, move |client, _app_context| {
+        run(safe_app, move |client, _app_context| {
             client
                 .get_adata_indices(appendable_data_address)
-                .map_err(|e| panic!("Failed to get Sequenced Appendable Data indices: {:?}", e))
-        }))
-        .data_index();
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to get Sequenced Appendable Data indices: {:?}", e))
+        .map(|data_returned| data_returned.data_index())
 
-        debug!("AD length is, \"{:?}\"", data_length);
-
-        Ok(data_length)
+        // debug!("AD length is, \"{:?}\"", data_length);
+        //
+        // Ok(data_length)
     }
 
     #[allow(dead_code)]
@@ -367,11 +370,12 @@ impl SafeApp {
             return Ok(data);
         }
 
-        let data = unwrap!(run(safe_app, move |client, _app_context| {
+        let data = run(safe_app, move |client, _app_context| {
             client
                 .get_adata_range(appendable_data_address, (start, end))
-                .map_err(|e| panic!("Failed to get Sequenced Appendable Data: {:?}", e))
-        }));
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to get Sequenced Appendable Data: {:?}", e))?;
 
         let this_version = data[0].clone();
         Ok(this_version)
@@ -389,12 +393,19 @@ impl SafeApp {
             None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
-        let xorname = unwrap!(run(safe_app, move |client, _app_context| {
-            let owners = match client.owner_key() {
-                Some(SafeNdPublicKey::Bls(pk)) => pk,
-                _ => panic!("Couldn't get account's owner pk"), // FIXME: return error instead of panic
-            };
+        let owner_key_option = run(safe_app, move |client, _app_context| {
+            let key = client.owner_key();
 
+            Ok(key)
+        })
+        .map_err(|err| format!("Failed to retrieve public key: {}", err))?;
+
+        let owners = match owner_key_option {
+            Some(SafeNdPublicKey::Bls(pk)) => pk,
+            _ => return Err("Failed to retrieve public key.".to_string()),
+        };
+
+        run(safe_app, move |client, _app_context| {
             let xorname = name.unwrap_or_else(|| {
                 let mut rng = unwrap!(OsRng::new());
                 let mut xorname = XorName::default();
@@ -421,13 +432,13 @@ impl SafeApp {
                 permission_map,
                 SafeNdPublicKey::Bls(owners),
             );
+
             client
                 .put_seq_mutable_data(mdata)
-                .map_err(|e| panic!("{:?}", e))
+                .map_err(|err| CoreError(err))
                 .map(move |_| xorname)
-        }));
-
-        Ok(xorname)
+        })
+        .map_err(|err| format!("Failed to put mutable data: {}", err))
     }
 
     // TODO: we shouldn't need to expose this function, function like list_seq_mdata_entries should be exposed
@@ -439,12 +450,12 @@ impl SafeApp {
         };
 
         let xorname = XorUrlEncoder::from_url(xorurl)?.xorname();
-        let md = unwrap!(run(safe_app, move |client, _app_context| {
+        run(safe_app, move |client, _app_context| {
             client
                 .get_seq_mdata(xorname, tag)
-                .map_err(|e| panic!("Failed to get MD: {:?}", e))
-        }));
-        Ok(md)
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to get MD: {:?}", e))
     }
 
     pub fn seq_mutable_data_insert(
@@ -481,34 +492,35 @@ impl SafeApp {
         };
 
         let xorname = XorUrlEncoder::from_url(xorurl)?.xorname();
-        let data = unwrap!(run(safe_app, move |client, _app_context| {
+
+        run(safe_app, move |client, _app_context| {
             client
                 .get_seq_mdata_value(xorname, tag, key.to_vec())
-                .map_err(|e| panic!("Failed to retrieve key. {:?}", e)) // FIXME: return error instead of panic
-        }));
-
-        Ok(data)
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to retrieve key. {:?}", e))
     }
 
     pub fn list_seq_mdata_entries(
         &self,
         xorurl: &str,
         tag: u64,
-    ) -> Result<BTreeMap<Vec<u8>, MDataValue>, &str> {
+    ) -> Result<BTreeMap<Vec<u8>, MDataValue>, String> {
         let safe_app: &App = match &self.safe_conn {
             Some(app) => &app,
-            None => return Err(APP_NOT_CONNECTED),
+            None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
         let xorname = XorUrlEncoder::from_url(xorurl)
             .map_err(|_| "InvalidXorUrl")?
             .xorname();
-        let entries = unwrap!(run(safe_app, move |client, _app_context| {
+
+        run(safe_app, move |client, _app_context| {
             client
                 .list_seq_mdata_entries(xorname, tag)
-                .map_err(|e| panic!("Failed to get MD: {:?}", e)) // FIXME: return error instead of panic
-        }));
-        Ok(entries)
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|e| format!("Failed to get MD: {:?}", e))
     }
 
     #[allow(dead_code)]
@@ -543,11 +555,18 @@ impl SafeApp {
         };
         let xorname = XorUrlEncoder::from_url(xorurl)?.xorname();
         let message = error_msg.to_string();
-        unwrap!(run(safe_app, move |client, _app_context| {
+
+        run(safe_app, move |client, _app_context| {
             client
                 .mutate_seq_mdata_entries(xorname, tag, entry_actions)
-                .map_err(move |err| panic!(format!("{}: {}", message, err))) // FIXME: return error instead of panic
-        }));
+                .map_err(|err| CoreError(err))
+        })
+        .map_err(|err| {
+            format!(
+                "Failed to mutate seq mutable data entrues: {}: {}",
+                message, err
+            )
+        });
 
         Ok(())
     }
