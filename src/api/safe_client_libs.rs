@@ -9,11 +9,12 @@
 use super::helpers::{decode_ipc_msg, xorname_from_pk, KeyPair};
 use super::xorurl::{create_random_xorname, XorUrlEncoder};
 use futures::future::Future;
-use log::{debug, warn};
+use log::{debug, warn, info};
 use rand::rngs::OsRng;
 use rand_core::RngCore;
 use safe_app::AppError::CoreError;
 use safe_app::{run, App};
+use maidsafe_utilities;
 
 #[cfg(feature = "fake-auth")]
 use safe_app::test_utils::create_app;
@@ -185,6 +186,8 @@ impl SafeApp {
     }
 
     pub fn files_get_published_immutable(&self, xorname: XorName) -> Result<Vec<u8>, String> {
+		debug!("Fetching immutable data: {:?}", &xorname);
+
         let safe_app: &App = match &self.safe_conn {
             Some(app) => &app,
             None => return Err(APP_NOT_CONNECTED.to_string()),
@@ -194,6 +197,7 @@ impl SafeApp {
             client.get_idata(xorname).map_err(|err| CoreError(err))
         })
         .map_err(|e| format!("Failed to GET Published ImmutableData: {:?}", e))?;
+		debug!("the_data: {:?}", &xorname);
 
         Ok(data.value().to_vec())
     }
@@ -205,12 +209,18 @@ impl SafeApp {
         tag: u64,
         _permissions: Option<String>,
     ) -> Result<XorName, String> {
+
+
+		maidsafe_utilities::log::init(false);
+		debug!("Putting appendable data w/ type: {:?}, xorname: {:?}", &tag, &name);
+
         let safe_app: &App = match &self.safe_conn {
             Some(app) => &app,
             None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
         let xorname = name.unwrap_or_else(create_random_xorname);
+		info!("Xorname for storage: {:?}", &xorname);
 
         run(safe_app, move |client, _app_context| {
             let appendable_data_address = ADataAddress::new_pub_seq(xorname, tag);
@@ -248,7 +258,6 @@ impl SafeApp {
                 .map(move |_| xorname)
         })
         .map_err(|e| format!("Failed to PUT Sequenced Appendable Data: {:?}", e))
-        // Ok(xorname)
     }
 
     pub fn append_seq_appendable_data(
@@ -285,12 +294,17 @@ impl SafeApp {
         xorname: XorName,
         tag: u64,
     ) -> Result<(u64, (Vec<u8>, Vec<u8>)), String> {
+
+		debug!("Getting latest seq_appendable_data for: {:?}", &xorname);
+
         let safe_app: &App = match &self.safe_conn {
             Some(app) => &app,
             None => return Err(APP_NOT_CONNECTED.to_string()),
         };
 
         let appendable_data_address = ADataAddress::new_pub_seq(xorname, tag);
+
+		debug!("Address for a_data : {:?}", appendable_data_address);
 
         let data_length = self
             .get_current_seq_appendable_data_version(xorname, tag)

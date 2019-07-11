@@ -1,0 +1,36 @@
+# Copy this sample file next to the binary to test (e.g. in "./target/release")
+
+[appenders.aws]
+kind = "async_web_socket"
+server_url = "ws://127.0.0.1:55555" # Make sure to either spawn a web server at this address or
+                                    # change this URL.
+session_id = "magic-value"
+
+[appenders.display]
+kind = "console"
+
+[appenders.async_file]
+kind = "async_file"
+output_file_name = "This-is-a-sample-output.log"
+pattern = "{l} {d(%H:%M:%S.%f)} [{M} #FS#{f}#FE#:{L}] {m}{n}"
+append = true
+file_timestamp = true
+
+# This will log all levels from log_test into file and web socket.
+[loggers."log_test"]
+level = "trace"
+appenders = ["aws", "async_file"]
+additive = false # If true it will also send it to the appenders ("display") of parent ("root").
+
+# This will log from info level from log_test::abc into file and console.
+[loggers."log_test::abc"]
+level = "info"
+appenders = ["display", "async_file"]
+additive = false # If true it will also send it to the appenders ("aws") of parent ("log_test").
+
+# Although we don't need root logger, this is just for demonstration purpose.
+[root]
+level = "trace" # This will log all levels which are equal to or more severe to this from all crates
+                # and dependencies including 3rd party crates used in build process not covered by
+                # above loggers ("log_test" and "log_test::abc").
+appenders = ["display", "async_file"] # May not be supplied if not required.

@@ -2093,6 +2093,7 @@ dependencies = [
  "futures 0.1.28 (registry+https://github.com/rust-lang/crates.io-index)",
  "human-panic 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "maidsafe_utilities 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "mock_routing 0.1.0 (git+https://github.com/maidsafe/safe_client_libs?branch=experimental)",
  "multibase 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "predicates 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
