@@ -11,10 +11,10 @@ kind = "console"
 
 [appenders.async_file]
 kind = "async_file"
-output_file_name = "This-is-a-sample-output.log"
+output_file_name = "The-Safe-CLI.log"
 pattern = "{l} {d(%H:%M:%S.%f)} [{M} #FS#{f}#FE#:{L}] {m}{n}"
 append = true
-file_timestamp = true
+# file_timestamp = true
 
 # This will log all levels from log_test into file and web socket.
 [loggers."log_test"]
@@ -28,9 +28,27 @@ level = "info"
 appenders = ["display", "async_file"]
 additive = false # If true it will also send it to the appenders ("aws") of parent ("log_test").
 
-# Although we don't need root logger, this is just for demonstration purpose.
 [root]
-level = "trace" # This will log all levels which are equal to or more severe to this from all crates
-                # and dependencies including 3rd party crates used in build process not covered by
-                # above loggers ("log_test" and "log_test::abc").
-appenders = ["display", "async_file"] # May not be supplied if not required.
+level = "error"
+appenders = ["async_console", "async_file"]
+
+[loggers."crust"]
+level = "trace"
+
+[loggers."routing"]
+level = "trace"
+
+[loggers."routing_stats"]
+level = "trace"
+
+[loggers."safe_core"]
+level = "trace"
+
+[loggers."safe_app"]
+level = "trace"
+
+[loggers."safe_authenticator"]
+level = "trace"
+
+[loggers."ffi_utils"]
+level = "trace"
