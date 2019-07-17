@@ -211,6 +211,7 @@ impl Safe {
                 ))
             })?;
             let now = gen_timestamp();
+            println!("NOW: {:?}", now);
             let files_container_data = vec![(
                 now.into_bytes().to_vec(),
                 serialised_files_map.as_bytes().to_vec(),
@@ -236,7 +237,8 @@ impl Safe {
                     )))
                 }
             };
-
+            println!("CURRENT VERSION: {}", current_version);
+            println!("NEW DATA: {:?}", files_container_data);
             version = self.safe_app.append_seq_append_only_data(
                 files_container_data,
                 current_version + 1,
