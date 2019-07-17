@@ -81,6 +81,7 @@ impl Safe {
             ))
         })?;
         let now = gen_timestamp();
+        println!("NOW WHEN CREATING: {:?}", now);
         let files_container_data = vec![(
             now.into_bytes().to_vec(),
             serialised_files_map.as_bytes().to_vec(),
