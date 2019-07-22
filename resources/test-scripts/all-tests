@@ -29,7 +29,7 @@ set -e -x
 setup_safe_auth
 
 rustup component add clippy
-rustup component add fmt
+rustup component add rustfmt
 
 # lint
 cargo clippy --all-targets --all-features -- -D warnings
