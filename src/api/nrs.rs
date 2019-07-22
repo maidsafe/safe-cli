@@ -109,7 +109,7 @@ impl Safe {
 
         debug!("XorName for \"{:?}\" is \"{:?}\"", &name, &nrs_xorname);
 
-		let final_destination = destination.unwrap_or_else(|| "");
+        let final_destination = destination.unwrap_or_else(|| "");
         // TODO: Enable source for funds / ownership
 
         // The NrsMapContainer is created as a AppendOnlyData with a single entry containing the
@@ -120,7 +120,10 @@ impl Safe {
         let mut processed_entries = BTreeMap::new();
         processed_entries.insert(
             name.to_string(),
-            (CONTENT_ADDED_SIGN.to_string(), final_destination.to_string()),
+            (
+                CONTENT_ADDED_SIGN.to_string(),
+                final_destination.to_string(),
+            ),
         );
 
         let serialised_nrs_map = serde_json::to_string(&nrs_map).map_err(|err| {
@@ -256,13 +259,13 @@ fn test_nrs_map_container_create() {
     safe.connect("", Some("fake-credentials")).unwrap();
 
     let nrs_xorname = xorname_from_nrs_string("some_site").unwrap();
-    let SITE_NAME = "some_site";
+    let site_name = "some_site";
     let (xor_url, _entries, nrs_map) =
-        unwrap!(safe.nrs_map_container_create(SITE_NAME, Some("safe://top_xorurl"), true, false));
+        unwrap!(safe.nrs_map_container_create(site_name, Some("safe://top_xorurl"), true, false));
     assert_eq!(nrs_map.entries.len(), 1);
-    let public_name = &nrs_map.entries[SITE_NAME];
+    let public_name = &nrs_map.entries[site_name];
     assert_eq!(public_name[FAKE_RDF_PREDICATE_LINK], "safe://top_xorurl");
-    assert_eq!(nrs_map.get_default().unwrap(), SITE_NAME);
+    assert_eq!(nrs_map.get_default().unwrap(), site_name);
 
     let decoder = XorUrlEncoder::from_url(&xor_url).unwrap();
     assert_eq!(nrs_xorname, decoder.xorname())
@@ -271,7 +274,7 @@ fn test_nrs_map_container_create() {
 #[test]
 fn test_nrs_map_create() {
     use unwrap::unwrap;
-    let mut safe = Safe::new("base32z".to_string());
+    let _safe = Safe::new("base32z".to_string());
     let nrs_map = unwrap!(nrs_map_create("site1", "safe://top_xorurl", true));
     assert_eq!(nrs_map.entries.len(), 1);
     let public_name = &nrs_map.entries["site1"];
