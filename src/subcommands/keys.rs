@@ -9,7 +9,7 @@
 use super::helpers::get_secret_key;
 use super::OutputFmt;
 use log::{debug, warn};
-use safe_cli::{BlsKeyPair, Safe};
+use safe_cli::{BlsKeyPair, Safe, SafeKeysApi};
 use structopt::StructOpt;
 
 const PRELOAD_TESTCOINS_DEFAULT_AMOUNT: &str = "1000.111";

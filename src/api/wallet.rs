@@ -9,7 +9,7 @@
 use super::helpers::{parse_coins_amount, sk_from_hex};
 use super::keys::validate_key_pair;
 use super::xorurl::SafeContentType;
-use super::{BlsKeyPair, Safe, XorUrl, XorUrlEncoder};
+use super::{BlsKeyPair, Safe, SafeApp, SafeKeysApi, SafeWalletApi, XorUrl, XorUrlEncoder};
 use super::{Error, ResultReturn};
 use log::debug;
 use rand_core::RngCore;
@@ -29,10 +29,9 @@ struct WalletSpendableBalance {
     pub sk: String,
 }
 
-#[allow(dead_code)]
-impl Safe {
+impl SafeWalletApi for Safe {
     // Create an empty Wallet and return its XOR-URL
-    pub fn wallet_create(&mut self) -> ResultReturn<XorUrl> {
+    fn wallet_create(&mut self) -> ResultReturn<XorUrl> {
         let xorname = self
             .safe_app
             .put_seq_mutable_data(None, WALLET_TYPE_TAG, None)?;
@@ -46,7 +45,7 @@ impl Safe {
     }
 
     // Add a Key to a Wallet to make it spendable
-    pub fn wallet_insert(
+    fn wallet_insert(
         &mut self,
         wallet_xorurl: &str,
         name: &str,
@@ -93,7 +92,7 @@ impl Safe {
     }
 
     // Check the total balance of a Wallet found at a given XOR-URL
-    pub fn wallet_balance(&mut self, xorurl: &str) -> ResultReturn<String> {
+    fn wallet_balance(&mut self, xorurl: &str) -> ResultReturn<String> {
         debug!("Finding total wallet balance for: {:?}", xorurl);
         let mut total_balance: f64 = 0.0;
 
@@ -145,44 +144,6 @@ impl Safe {
         Ok(total_balance.to_string())
     }
 
-    fn wallet_get_default_balance(
-        &mut self,
-        wallet_xorurl: &str,
-    ) -> ResultReturn<WalletSpendableBalance> {
-        let default = self
-            .safe_app
-            .seq_mutable_data_get_value(
-                wallet_xorurl,
-                WALLET_TYPE_TAG,
-                WALLET_DEFAULT_BYTES.to_vec(),
-            )
-            .map_err(|_| {
-                Error::ContentError(format!(
-                    "No default balance found at Wallet \"{}\"",
-                    wallet_xorurl
-                ))
-            })?;
-
-        let the_balance: WalletSpendableBalance = {
-            let default_balance_vec = self
-                .safe_app
-                .seq_mutable_data_get_value(wallet_xorurl, WALLET_TYPE_TAG, default.data)
-                .map_err(|_| {
-                    Error::ContentError(format!(
-                        "Default balance set but not found at Wallet \"{}\"",
-                        wallet_xorurl
-                    ))
-                })?;
-
-            let default_balance = String::from_utf8_lossy(&default_balance_vec.data).to_string();
-            let spendable_balance: WalletSpendableBalance =
-                unwrap!(serde_json::from_str(&default_balance));
-            spendable_balance
-        };
-
-        Ok(the_balance)
-    }
-
     /// # Transfer safecoins from one Wallet to another
     ///
     /// Using established Wallet and SpendableBalances you can send safecoins between Wallets.
@@ -222,7 +183,7 @@ impl Safe {
     /// let to_balance = unwrap!(safe.keys_balance_from_xorurl( &key2_xorurl, &key_pair2.unwrap().sk ));
     /// assert_eq!("11.000000000", to_balance);
     /// ```
-    pub fn wallet_transfer(
+    fn wallet_transfer(
         &mut self,
         amount: &str,
         from: Option<XorUrl>,
@@ -244,8 +205,9 @@ impl Safe {
                 )),
             };
 
-        let from_wallet_balance = self.wallet_get_default_balance(&from_wallet_xorurl)?;
-        let to_wallet_balance = self.wallet_get_default_balance(&to)?;
+        let from_wallet_balance =
+            wallet_get_default_balance(&mut self.safe_app, &from_wallet_xorurl)?;
+        let to_wallet_balance = wallet_get_default_balance(&mut self.safe_app, &to)?;
         let to_xorname = XorUrlEncoder::from_url(&to_wallet_balance.xorurl)?.xorname();
 
         let from_sk = unwrap!(sk_from_hex(&from_wallet_balance.sk));
@@ -271,6 +233,42 @@ impl Safe {
             Ok(tx_id) => Ok(tx_id),
         }
     }
+}
+
+fn wallet_get_default_balance(
+    safe_app: &mut SafeApp,
+    wallet_xorurl: &str,
+) -> ResultReturn<WalletSpendableBalance> {
+    let default = safe_app
+        .seq_mutable_data_get_value(
+            wallet_xorurl,
+            WALLET_TYPE_TAG,
+            WALLET_DEFAULT_BYTES.to_vec(),
+        )
+        .map_err(|_| {
+            Error::ContentError(format!(
+                "No default balance found at Wallet \"{}\"",
+                wallet_xorurl
+            ))
+        })?;
+
+    let the_balance: WalletSpendableBalance = {
+        let default_balance_vec = safe_app
+            .seq_mutable_data_get_value(wallet_xorurl, WALLET_TYPE_TAG, default.data)
+            .map_err(|_| {
+                Error::ContentError(format!(
+                    "Default balance set but not found at Wallet \"{}\"",
+                    wallet_xorurl
+                ))
+            })?;
+
+        let default_balance = String::from_utf8_lossy(&default_balance_vec.data).to_string();
+        let spendable_balance: WalletSpendableBalance =
+            unwrap!(serde_json::from_str(&default_balance));
+        spendable_balance
+    };
+
+    Ok(the_balance)
 }
 
 // Unit Tests

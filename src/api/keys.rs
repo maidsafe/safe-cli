@@ -10,7 +10,7 @@ use super::helpers::{
     parse_coins_amount, pk_from_hex, pk_to_hex, sk_from_hex, xorname_from_pk, KeyPair,
 };
 use super::xorurl::SafeContentType;
-use super::{Error, ResultReturn, Safe, XorUrl, XorUrlEncoder};
+use super::{Error, ResultReturn, Safe, SafeKeysApi, XorUrl, XorUrlEncoder};
 use threshold_crypto::SecretKey;
 use unwrap::unwrap;
 
@@ -57,16 +57,16 @@ pub fn validate_key_pair(key_pair: &BlsKeyPair) -> ResultReturn<()> {
 }
 
 #[allow(dead_code)]
-impl Safe {
+impl SafeKeysApi for Safe {
     // Generate a key pair without creating and/or storing a Key on the network
-    pub fn keypair(&self) -> ResultReturn<BlsKeyPair> {
+    fn keypair(&self) -> ResultReturn<BlsKeyPair> {
         let key_pair = KeyPair::random();
         let (pk, sk) = key_pair.to_hex_key_pair()?;
         Ok(BlsKeyPair { pk, sk })
     }
 
     // Create a Key on the network and return its XOR-URL.
-    pub fn keys_create(
+    fn keys_create(
         &mut self,
         from: Option<String>,
         preload_amount: Option<String>,
@@ -126,7 +126,7 @@ impl Safe {
     // Create a Key on the network, allocates testcoins onto it, and return the Key's XOR-URL
     // This is avilable only when testing with mock-network
     // #[cfg(feature = "mock-network")]
-    pub fn keys_create_preload_test_coins(
+    fn keys_create_preload_test_coins(
         &mut self,
         preload_amount: String,
         pk: Option<String>,
@@ -159,7 +159,7 @@ impl Safe {
     }
 
     // Check Key's balance from the network from a given SecretKey string
-    pub fn keys_balance_from_sk(&self, sk: &str) -> ResultReturn<String> {
+    fn keys_balance_from_sk(&self, sk: &str) -> ResultReturn<String> {
         let secret_key = sk_from_hex(sk)?;
         self.safe_app
             .get_balance_from_sk(secret_key)
@@ -169,13 +169,13 @@ impl Safe {
     // Check Key's balance from the network from a given XOR-URL and secret key string.
     // The difference between this and 'keys_balance_from_sk' function is that this will additionally
     // check that the XOR-URL corresponds to the public key derived from the provided secret key
-    pub fn keys_balance_from_xorurl(&self, xorurl: &str, sk: &str) -> ResultReturn<String> {
+    fn keys_balance_from_xorurl(&self, xorurl: &str, sk: &str) -> ResultReturn<String> {
         self.validate_sk_for_xorurl(sk, xorurl)?;
         self.keys_balance_from_sk(sk)
     }
 
     // Check that the XOR-URL corresponds to the public key derived from the provided secret key
-    pub fn validate_sk_for_xorurl(&self, sk: &str, xorurl: &str) -> ResultReturn<String> {
+    fn validate_sk_for_xorurl(&self, sk: &str, xorurl: &str) -> ResultReturn<String> {
         let secret_key: SecretKey = sk_from_hex(sk)
             .map_err(|_| Error::InvalidInput("Invalid secret key provided".to_string()))?;
         let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;

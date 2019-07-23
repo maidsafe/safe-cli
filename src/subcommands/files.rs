@@ -9,7 +9,7 @@
 use super::helpers::get_from_arg_or_stdin;
 use super::OutputFmt;
 use prettytable::{format::FormatBuilder, Table};
-use safe_cli::Safe;
+use safe_cli::{Safe, SafeFilesApi};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]

@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::helpers::decode_ipc_msg;
-use super::{Error, ResultReturn, Safe};
+use super::{Error, ResultReturn, Safe, SafeAuthApi};
 use log::{debug, info};
 use reqwest::get as httpget;
 use safe_core::ipc::{encode_msg, gen_req_id, AppExchangeInfo, AuthReq, IpcMsg, IpcReq};
@@ -22,11 +22,10 @@ const SAFE_AUTH_ENDPOINT_PORT: u16 = 41805;
 // Path where the authenticator webservice endpoint
 const SAFE_AUTH_ENDPOINT_PATH: &str = "authorise/";
 
-#[allow(dead_code)]
-impl Safe {
+impl SafeAuthApi for Safe {
     // Generate an authorisation request string and send it to a SAFE Authenticator.
     // Ir returns the credentials necessary to connect to the network, encoded in a single string.
-    pub fn auth_app(
+    fn auth_app(
         &mut self,
         app_id: &str,
         app_name: &str,
@@ -97,7 +96,7 @@ impl Safe {
     }
 
     // Connect to the SAFE Network using the provided app id and auth credentials
-    pub fn connect(&mut self, app_id: &str, auth_credentials: Option<&str>) -> ResultReturn<()> {
+    fn connect(&mut self, app_id: &str, auth_credentials: Option<&str>) -> ResultReturn<()> {
         self.safe_app.connect(app_id, auth_credentials)
     }
 }

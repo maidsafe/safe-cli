@@ -11,7 +11,10 @@ use super::helpers::get_host_and_path;
 use super::nrs::{xorname_from_nrs_string, NRS_MAP_TYPE_TAG};
 use super::xorurl::SafeContentType;
 
-use super::{Error, ResultReturn, Safe, XorName, XorUrl, XorUrlEncoder};
+use super::{
+    Error, ResultReturn, Safe, SafeFetchApi, SafeFilesApi, SafeNrsApi, XorName, XorUrl,
+    XorUrlEncoder,
+};
 use log::{debug, info};
 
 #[derive(Debug, PartialEq)]
@@ -49,8 +52,7 @@ pub enum SafeData {
     },
 }
 
-#[allow(dead_code)]
-impl Safe {
+impl SafeFetchApi for Safe {
     /// # Retrieve data from a xorurl
     ///
     /// ## Examples
@@ -80,7 +82,7 @@ impl Safe {
     ///
     /// assert!(data_string.starts_with("hello tests!"));
     /// ```
-    pub fn fetch(&self, xorurl: &str) -> ResultReturn<SafeData> {
+    fn fetch(&self, xorurl: &str) -> ResultReturn<SafeData> {
         debug!("Attempting to fetch url: {:?}", xorurl);
 
         let xorurl_encoder = XorUrlEncoder::from_url(&xorurl);

@@ -11,7 +11,7 @@ use super::OutputFmt;
 use crate::subcommands::auth::auth_connect;
 use log::debug;
 use prettytable::Table;
-use safe_cli::{Safe, SafeData};
+use safe_cli::{Safe, SafeData, SafeFetchApi};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]

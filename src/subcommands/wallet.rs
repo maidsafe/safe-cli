@@ -12,7 +12,7 @@ use super::helpers::{get_from_arg_or_stdin, get_secret_key};
 use super::keys::create_new_key;
 use super::OutputFmt;
 use log::debug;
-use safe_cli::{BlsKeyPair, Safe};
+use safe_cli::{BlsKeyPair, Safe, SafeKeysApi, SafeWalletApi};
 use unwrap::unwrap;
 
 #[derive(StructOpt, Debug)]

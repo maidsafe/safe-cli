@@ -20,7 +20,7 @@ use std::io::Write;
 use std::str::FromStr;
 use std::{fs, str};
 use threshold_crypto::{PublicKey, SecretKey};
-use unwrap::unwrap;
+use unwrap::unwrap; // TODO: remove all unwraps
 
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(dead_code)]

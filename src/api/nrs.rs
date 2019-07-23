@@ -13,7 +13,7 @@ use super::constants::{
 
 use super::helpers::gen_timestamp_secs;
 use super::xorurl::SafeContentType;
-use super::{Error, ResultReturn, Safe, XorUrl, XorUrlEncoder};
+use super::{Error, ResultReturn, Safe, SafeNrsApi, XorUrl, XorUrlEncoder};
 use log::{debug, warn};
 use safe_nd::XorName;
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,9 @@ static ERROR_MSG_NO_NRS_MAP_FOUND: &str = "No NRS Map found at this address";
 
 // Each PublicName contains metadata and the link to the target's XOR-URL
 pub type PublicName = BTreeMap<String, String>;
+
+// List of public names uploaded with details if they were added, updated or deleted from NrsMaps
+pub type ProcessedEntries = BTreeMap<String, (String, String)>;
 
 // To use for mapping domain names (with path in a flattened hierarchy) to PublicNames
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
@@ -67,9 +70,6 @@ impl NrsMap {
     }
 }
 
-// List of public names uploaded with details if they were added, updated or deleted from NrsMaps
-type ProcessedEntries = BTreeMap<String, (String, String)>;
-
 pub fn xorname_from_nrs_string(name: &str) -> ResultReturn<XorName> {
     let vec_hash = sha3_256(&name.to_string().into_bytes());
 
@@ -80,7 +80,7 @@ pub fn xorname_from_nrs_string(name: &str) -> ResultReturn<XorName> {
 }
 
 #[allow(dead_code)]
-impl Safe {
+impl SafeNrsApi for Safe {
     /// # Create a NrsMapContainer.
     ///
     /// ## Example
@@ -96,7 +96,7 @@ impl Safe {
     /// let (xorurl, _processed_entries, nrs_map_container) = safe.nrs_map_container_create(&rand_string, Some("safe://somewhere"), true, false).unwrap();
     /// assert!(xorurl.contains("safe://"))
     /// ```
-    pub fn nrs_map_container_create(
+    fn nrs_map_container_create(
         &mut self,
         name: &str,
         destination: Option<&str>,
@@ -109,7 +109,7 @@ impl Safe {
 
         debug!("XorName for \"{:?}\" is \"{:?}\"", &name, &nrs_xorname);
 
-		let final_destination = destination.unwrap_or_else(|| "");
+        let final_destination = destination.unwrap_or_else(|| "");
         // TODO: Enable source for funds / ownership
 
         // The NrsMapContainer is created as a AppendOnlyData with a single entry containing the
@@ -120,7 +120,10 @@ impl Safe {
         let mut processed_entries = BTreeMap::new();
         processed_entries.insert(
             name.to_string(),
-            (CONTENT_ADDED_SIGN.to_string(), final_destination.to_string()),
+            (
+                CONTENT_ADDED_SIGN.to_string(),
+                final_destination.to_string(),
+            ),
         );
 
         let serialised_nrs_map = serde_json::to_string(&nrs_map).map_err(|err| {
@@ -173,10 +176,7 @@ impl Safe {
     /// assert_eq!(nrs_map_container.get_default_link().unwrap(), "somewhere");
     /// assert_eq!(nrs_map_container.get_default().unwrap(), &rand_string);
     /// ```
-    pub fn nrs_map_container_get_latest(
-        &self,
-        xorurl: &str,
-    ) -> ResultReturn<(u64, NrsMap, String)> {
+    fn nrs_map_container_get_latest(&self, xorurl: &str) -> ResultReturn<(u64, NrsMap, String)> {
         debug!("Getting latest resolvable map container from: {:?}", xorurl);
 
         let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;

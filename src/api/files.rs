@@ -13,7 +13,7 @@ use super::constants::{
 };
 use super::helpers::{gen_timestamp_nanos, gen_timestamp_secs};
 use super::xorurl::SafeContentType;
-use super::{Error, ResultReturn, Safe, XorUrl, XorUrlEncoder};
+use super::{Error, ResultReturn, Safe, SafeFilesApi, XorUrl, XorUrlEncoder};
 use log::{debug, info, warn};
 use relative_path::RelativePath;
 use std::collections::BTreeMap;
@@ -27,7 +27,7 @@ pub type FileItem = BTreeMap<String, String>;
 pub type FilesMap = BTreeMap<String, FileItem>;
 
 // List of files uploaded with details if they were added, updated or deleted from FilesContainer
-type ProcessedFiles = BTreeMap<String, (String, String)>;
+pub type ProcessedFiles = BTreeMap<String, (String, String)>;
 
 // Type tag to use for the FilesContainer stored on AppendOnlyData
 const FILES_CONTAINER_TYPE_TAG: u64 = 10_100;
@@ -39,7 +39,7 @@ const ERROR_MSG_NO_FILES_CONTAINER_FOUND: &str = "No FilesContainer found at thi
 const MAX_RECURSIVE_DEPTH: usize = 10000;
 
 #[allow(dead_code)]
-impl Safe {
+impl SafeFilesApi for Safe {
     /// # Create a FilesContaier.
     ///
     /// ## Example
@@ -51,7 +51,7 @@ impl Safe {
     /// let (xorurl, _processed_files, _files_map) = safe.files_container_create("tests/testfolder", None, true, false).unwrap();
     /// assert!(xorurl.contains("safe://"))
     /// ```
-    pub fn files_container_create(
+    fn files_container_create(
         &mut self,
         location: &str,
         dest: Option<String>,
@@ -119,10 +119,7 @@ impl Safe {
     /// println!("FilesContainer is stored on a {} data type", native_type);
     /// println!("FilesMap of latest fetched version is: {:?}", files_map);
     /// ```
-    pub fn files_container_get_latest(
-        &self,
-        xorurl: &str,
-    ) -> ResultReturn<(u64, FilesMap, String)> {
+    fn files_container_get_latest(&self, xorurl: &str) -> ResultReturn<(u64, FilesMap, String)> {
         debug!("Getting latest files container from: {:?}", xorurl);
 
         let xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
@@ -174,7 +171,7 @@ impl Safe {
     /// println!("The local files that were synced up are: {:?}", new_processed_files);
     /// println!("The FilesMap of the updated FilesContainer now is: {:?}", new_files_map);
     /// ```
-    pub fn files_container_sync(
+    fn files_container_sync(
         &mut self,
         location: &str,
         xorurl: &str,
@@ -252,7 +249,7 @@ impl Safe {
     /// # let received_data = safe.files_get_published_immutable(&xorurl).unwrap();
     /// # assert_eq!(received_data, data);
     /// ```
-    pub fn files_put_published_immutable(&mut self, data: &[u8]) -> ResultReturn<XorUrl> {
+    fn files_put_published_immutable(&mut self, data: &[u8]) -> ResultReturn<XorUrl> {
         // TODO: do we want ownership from other PKs yet?
         let xorname = self.safe_app.files_put_published_immutable(&data)?;
 
@@ -278,7 +275,7 @@ impl Safe {
     /// let received_data = safe.files_get_published_immutable(&xorurl).unwrap();
     /// # assert_eq!(received_data, data);
     /// ```
-    pub fn files_get_published_immutable(&self, xorurl: &str) -> ResultReturn<Vec<u8>> {
+    fn files_get_published_immutable(&self, xorurl: &str) -> ResultReturn<Vec<u8>> {
         // TODO: do we want ownership from other PKs yet?
         let xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
         self.safe_app

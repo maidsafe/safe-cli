@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use log::debug;
-use safe_cli::Safe;
+use safe_cli::{Safe, SafeAuthApi};
 use structopt::StructOpt;
 
 const APP_ID: &str = "net.maidsafe.cli";
