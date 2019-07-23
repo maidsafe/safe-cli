@@ -17,9 +17,6 @@ use predicates::prelude::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::collections::BTreeMap;
-use std::fs;
-use std::fs::OpenOptions;
-use std::io::{prelude::*, Seek, SeekFrom};
 use std::process::Command;
 
 const PRETTY_NRS_CREATION_RESPONSE: &str = "New NrsMap";
@@ -51,7 +48,7 @@ fn calling_safe_nrs_create_pretty() {
 fn calling_safe_nrs_twice_w_name_fails() {
     let test_name = get_random_nrs_string();
 
-    let nrs_creation = cmd!(
+    let _nrs_creation = cmd!(
         get_bin_location(),
         "nrs",
         "create",
@@ -131,7 +128,7 @@ fn calling_safe_nrs_put_folder_and_fetch() {
     assert!(cat_of_nrs_map_url.contains("Files of FilesContainer (version 1)"));
 
     assert!(nrs_creation.contains("safe://"));
-    assert!(nrs_creation.contains("+"));
+    assert!(nrs_creation.contains('+'));
     assert!(nrs_creation.contains(&test_name));
 
     let another_file = format!("{}/another.md", &test_name);
