@@ -29,13 +29,10 @@ set -e -x
 setup_safe_auth
 
 rustup component add clippy
-rustup component add rustfmt
 
 # lint
 cargo clippy --all-targets --all-features -- -D warnings
 
-# check formatting
-cargo fmt --check
 # run tests with CLI's own mock
 cargo test --release --features=scl-mock -- --test-threads=1
 
