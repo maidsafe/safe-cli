@@ -29,6 +29,12 @@ stage('build & test') {
             packageBuildArtifacts('macos')
             uploadBuildArtifacts()
         }
+    },
+    clippy: {
+        node('safe_cli') {
+            checkout(scm)
+            sh("make clippy")
+        }
     }
 }
 
