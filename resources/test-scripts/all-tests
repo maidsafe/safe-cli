@@ -31,6 +31,9 @@ setup_safe_auth
 # check formatting
 cargo fmt -- --check
 
+# setup auth CLI service
+setup_safe_auth
+
 # run tests with CLI's own mock
 cargo test --release --features=scl-mock -- --test-threads=1
 

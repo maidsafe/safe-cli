@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::helpers::{parse_coins_amount, sk_from_hex, xorname_from_pk, KeyPair};
-use super::xorurl::SafeContentType;
+use super::xorurl::{SafeContentType, SafeDataType};
 use super::{Error, ResultReturn};
 use super::{Safe, XorUrl, XorUrlEncoder};
 use log::debug;
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use unwrap::unwrap; // TODO: remove all unwraps from this file
 
 // Type tag used for the Wallet container
-const WALLET_TYPE_TAG: u64 = 10_000;
+const WALLET_TYPE_TAG: u64 = 1_000;
 
 const WALLET_DEFAULT: &str = "_default";
 const WALLET_DEFAULT_BYTES: &[u8] = b"_default";
@@ -39,6 +39,7 @@ impl Safe {
         XorUrlEncoder::encode(
             xorname,
             WALLET_TYPE_TAG,
+            SafeDataType::SeqMutableData,
             SafeContentType::Wallet,
             None,
             &self.xorurl_base,
@@ -58,7 +59,8 @@ impl Safe {
         let xorurl = XorUrlEncoder::encode(
             xorname,
             0,
-            SafeContentType::CoinBalance,
+            SafeDataType::CoinBalance,
+            SafeContentType::Raw,
             None,
             &self.xorurl_base,
         )?;
