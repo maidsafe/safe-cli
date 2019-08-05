@@ -110,10 +110,10 @@ package-commit_hash-artifacts-for-deploy:
 	rm -f *.tar
 	rm -rf deploy
 	mkdir deploy
-	tar -C artifacts/linux/release -cvf safe_cli-$$(git rev-parse --short HEAD)-x86_64-unknown-linux-gnu.tar safe
+	tar -C artifacts/linux/release -cvf safe_cli-$$(git rev-parse --short HEAD)-x86_64-unknown-linux-musl.tar safe
 	tar -C artifacts/win/release -cvf safe_cli-$$(git rev-parse --short HEAD)-x86_64-pc-windows-gnu.tar safe.exe
 	tar -C artifacts/macos/release -cvf safe_cli-$$(git rev-parse --short HEAD)-x86_64-apple-darwin.tar safe
-	mv safe_cli-$$(git rev-parse --short HEAD)-x86_64-unknown-linux-gnu.tar deploy
+	mv safe_cli-$$(git rev-parse --short HEAD)-x86_64-unknown-linux-musl.tar deploy
 	mv safe_cli-$$(git rev-parse --short HEAD)-x86_64-pc-windows-gnu.tar deploy
 	mv safe_cli-$$(git rev-parse --short HEAD)-x86_64-apple-darwin.tar deploy
 
@@ -121,10 +121,10 @@ package-version-artifacts-for-deploy:
 	rm -f *.tar
 	rm -rf deploy
 	mkdir deploy
-	tar -C artifacts/linux/release -cvf safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-gnu.tar safe
+	tar -C artifacts/linux/release -cvf safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-musl.tar safe
 	tar -C artifacts/win/release -cvf safe_cli-${SAFE_CLI_VERSION}-x86_64-pc-windows-gnu.tar safe.exe
 	tar -C artifacts/macos/release -cvf safe_cli-${SAFE_CLI_VERSION}-x86_64-apple-darwin.tar safe
-	mv safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-gnu.tar deploy
+	mv safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-musl.tar deploy
 	mv safe_cli-${SAFE_CLI_VERSION}-x86_64-pc-windows-gnu.tar deploy
 	mv safe_cli-${SAFE_CLI_VERSION}-x86_64-apple-darwin.tar deploy
 
@@ -143,8 +143,8 @@ endif
 		--user ${GITHUB_REPO_OWNER} \
 		--repo ${GITHUB_REPO_NAME} \
 		--tag ${SAFE_CLI_VERSION} \
-		--name "safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-gnu.tar" \
-		--file deploy/safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-gnu.tar;
+		--name "safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-musl.tar" \
+		--file deploy/safe_cli-${SAFE_CLI_VERSION}-x86_64-unknown-linux-musl.tar;
 	github-release upload \
 		--user ${GITHUB_REPO_OWNER} \
 		--repo ${GITHUB_REPO_NAME} \
