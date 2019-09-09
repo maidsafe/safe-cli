@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::auth::auth_connect;
-use super::helpers::get_secret_key;
+use super::helpers::{get_from_arg_or_stdin, get_secret_key};
 use super::OutputFmt;
 use log::{debug, warn};
 use safe_cli::{BlsKeyPair, Safe};
@@ -42,6 +42,21 @@ pub enum KeysSubCommands {
         /// The secret key which corresponds to the target SafeKey. It will be prompted if not provided
         #[structopt(long = "sk")]
         secret: Option<String>,
+    },
+    #[structopt(name = "transfer")]
+    /// Transfer safecoins from one SafeKey to another, or to a Wallet
+    Transfer {
+        /// Number of safecoins to transfer
+        amount: String,
+        /// Source SafeKey's secret key, or funds from Account's default SafeKey will be used
+        #[structopt(long = "from")]
+        from: Option<String>,
+        /// The receiving Wallet/SafeKey URL, or pulled from stdin if not provided
+        #[structopt(long = "to")]
+        to: Option<String>,
+        /// The transaction ID, a random one will be generated if not provided. A valid TX Id is a number between 0 and 2^64
+        #[structopt(long = "tx-id")]
+        tx_id: Option<u64>,
     },
 }
 
@@ -88,7 +103,32 @@ pub fn key_commander(
             }
             Ok(())
         }
-        None => Err("Missing keys sub-command. Use --help for details.".to_string()),
+        Some(KeysSubCommands::Transfer {
+            amount,
+            from,
+            to,
+            tx_id,
+        }) => {
+            // TODO: don't connect if --from sk was passed
+            auth_connect(safe)?;
+
+            //TODO: if to starts without safe://, i.e. if it's a PK hex string.
+            let destination = get_from_arg_or_stdin(
+                to,
+                Some("...awaiting destination Wallet/SafeKey URL from STDIN stream..."),
+            )?;
+
+            let tx_id = safe.keys_transfer(&amount, from, &destination, tx_id)?;
+
+            if OutputFmt::Pretty == output_fmt {
+                println!("Success. TX_ID: {}", &tx_id);
+            } else {
+                println!("{}", &tx_id)
+            }
+
+            Ok(())
+        }
+        None => Err("Missing keys sub-command. Use -h / --help for details.".to_string()),
     }
 }
 

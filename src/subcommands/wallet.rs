@@ -72,14 +72,19 @@ pub enum WalletSubCommands {
         preload: Option<String>,
     },
     #[structopt(name = "transfer")]
-    /// Transfer safecoins from one Wallet, SafeKey or pk, to another
+    /// Transfer safecoins from one Wallet to another, or to a SafeKey
     Transfer {
         /// Number of safecoins to transfer
         amount: String,
-        /// The receiving Wallet/Key URL
-        to: String,
-        /// Source Wallet URL, or pulled from stdin if not provided
+        /// Source Wallet URL
+        #[structopt(long = "from")]
         from: Option<String>,
+        /// The receiving Wallet/SafeKey URL, or pulled from stdin if not provided
+        #[structopt(long = "to")]
+        to: Option<String>,
+        /// The transaction ID, a random one will be generated if not provided. A valid TX Id is a number between 0 and 2^64
+        #[structopt(long = "tx-id")]
+        tx_id: Option<u64>,
     },
     /*#[structopt(name = "sweep")]
     /// Move all coins within a Wallet to a second given Wallet or Key
@@ -216,14 +221,19 @@ pub fn wallet_commander(
             }
             Ok(())
         }
-        Some(WalletSubCommands::Transfer { amount, from, to }) => {
-            //TODO: if from/to start without safe://, i.e. if they are PK hex strings.
-            let source = get_from_arg_or_stdin(
-                from,
-                Some("...awaiting source Wallet/Key URL to be used for funds from STDIN stream..."),
+        Some(WalletSubCommands::Transfer {
+            amount,
+            from,
+            to,
+            tx_id,
+        }) => {
+            //TODO: if to starts without safe://, i.e. if it's a PK hex string.
+            let destination = get_from_arg_or_stdin(
+                to,
+                Some("...awaiting destination Wallet/SafeKey URL from STDIN stream..."),
             )?;
 
-            let tx_id = safe.wallet_transfer(&amount, Some(&source), &to)?;
+            let tx_id = safe.wallet_transfer(&amount, from, &destination, tx_id)?;
 
             if OutputFmt::Pretty == output_fmt {
                 println!("Success. TX_ID: {}", &tx_id);
@@ -233,6 +243,6 @@ pub fn wallet_commander(
 
             Ok(())
         }
-        _ => Err("Sub-command not supported yet".to_string()),
+        None => Err("Missing wallet sub-command. Use -h / --help for details.".to_string()),
     }
 }
