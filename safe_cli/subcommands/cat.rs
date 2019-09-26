@@ -8,7 +8,7 @@
 
 use super::helpers::{get_from_arg_or_stdin, xorname_to_hex};
 use super::OutputFmt;
-use crate::subcommands::auth::auth_connect;
+use crate::subcommands::auth::connect_without_auth;
 use log::debug;
 use prettytable::Table;
 use safe_api::{NrsMapContainerInfo, Safe, SafeData};
@@ -32,9 +32,7 @@ pub fn cat_commander(
     let url = get_from_arg_or_stdin(cmd.location, None)?;
     debug!("Running cat for: {:?}", &url);
 
-    // TODO: pending: https://github.com/maidsafe/safe_client_libs/issues/899
-    // switch to connect_without_authL: connect_without_auth(safe)?;
-    auth_connect(safe)?;
+    connect_without_auth(safe)?;
     let content = safe.fetch(&url)?;
     match &content {
         SafeData::FilesContainer {
