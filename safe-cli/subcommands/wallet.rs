@@ -64,10 +64,10 @@ pub enum WalletSubCommands {
         /// Pass the secret key needed to make the balance spendable, it will be prompted if not provided
         #[structopt(long = "sk")]
         secret_key: Option<String>,
-        /// Create a Key, allocate test-coins onto it, and add the SafeKey to the Wallet
+        /// Create a SafeKey, allocate test-coins onto it, and add the SafeKey to the Wallet
         #[structopt(long = "test-coins")]
         test_coins: bool,
-        /// Preload the key with a balance
+        /// Preload with a balance
         #[structopt(long = "preload")]
         preload: Option<String>,
     },
@@ -140,7 +140,7 @@ pub fn wallet_commander(
                 };
 
                 // insert and set as default
-                safe.wallet_insert(&wallet_xorurl, name, true, &sk)?;
+                safe.wallet_insert(&wallet_xorurl, name.as_ref().map(String::as_str), true, &sk)?;
             }
 
             if OutputFmt::Pretty == output_fmt {
@@ -179,10 +179,18 @@ pub fn wallet_commander(
             let balance = safe.wallet_balance(&target)?;
 
             if OutputFmt::Pretty == output_fmt {
-                println!(
-                    "Wallet at \"{}\" has a total balance of {} safecoins",
-                    target, balance
-                );
+                let xorurl_encoder = Safe::parse_url(&target)?;
+                if xorurl_encoder.path().is_empty() {
+                    println!(
+                        "Wallet at \"{}\" has a total balance of {} safecoins",
+                        target, balance
+                    );
+                } else {
+                    println!(
+                        "Wallet's spendable balance at \"{}\" has a balance of {} safecoins",
+                        target, balance
+                    );
+                }
             } else {
                 println!("{}", balance);
             }
@@ -210,7 +218,8 @@ pub fn wallet_commander(
                 None => get_secret_key("", secret_key, "the SafeKey to insert")?,
             };
 
-            let the_name = safe.wallet_insert(&target, name, default, &sk)?;
+            let the_name =
+                safe.wallet_insert(&target, name.as_ref().map(String::as_str), default, &sk)?;
             if OutputFmt::Pretty == output_fmt {
                 println!(
                     "Spendable balance inserted with name '{}' in Wallet located at \"{}\"",
@@ -233,7 +242,12 @@ pub fn wallet_commander(
                 Some("...awaiting destination Wallet/SafeKey URL from STDIN stream..."),
             )?;
 
-            let tx_id = safe.wallet_transfer(&amount, from, &destination, tx_id)?;
+            let tx_id = safe.wallet_transfer(
+                &amount,
+                from.as_ref().map(String::as_str),
+                &destination,
+                tx_id,
+            )?;
 
             if OutputFmt::Pretty == output_fmt {
                 println!("Success. TX_ID: {}", &tx_id);
