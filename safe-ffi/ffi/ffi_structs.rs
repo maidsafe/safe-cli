@@ -36,12 +36,14 @@ pub fn bls_key_pair_into_repr_c(key_pair: &NativeBlsKeyPair) -> ResultReturn<Bls
 
 #[repr(C)]
 pub struct SafeKey {
+    pub xorurl: *const c_char,
     pub xorname: XorNameArray,
     pub resolved_from: NrsMapContainerInfo,
 }
 
 #[repr(C)]
 pub struct Wallet {
+    pub xorurl: *const c_char,
     pub xorname: XorNameArray,
     pub type_tag: u64,
     pub balances: WalletSpendableBalances,
@@ -51,6 +53,7 @@ pub struct Wallet {
 
 #[repr(C)]
 pub struct FilesContainer {
+    pub xorurl: *const c_char,
     pub xorname: XorNameArray,
     pub type_tag: u64,
     pub version: u64,
@@ -61,6 +64,7 @@ pub struct FilesContainer {
 
 #[repr(C)]
 pub struct PublishedImmutableData {
+    pub xorurl: *const c_char,
     pub xorname: XorNameArray,
     pub data: *const u8,
     pub data_len: usize,

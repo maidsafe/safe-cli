@@ -25,12 +25,14 @@ pub unsafe extern "C" fn fetch(
         let content = (*app).fetch(&url)?;
         match &content {
             SafeData::PublishedImmutableData {
+                xorurl,
                 data,
                 xorname,
                 resolved_from,
                 media_type,
             } => {
                 let published_data = PublishedImmutableData {
+                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     xorname: xorname.0,
                     data: data.as_ptr(),
                     data_len: data.len(),
@@ -42,6 +44,7 @@ pub unsafe extern "C" fn fetch(
                 o_published(user_data.0, &published_data);
             }
             SafeData::FilesContainer {
+                xorurl,
                 version,
                 files_map,
                 type_tag,
@@ -50,6 +53,7 @@ pub unsafe extern "C" fn fetch(
                 resolved_from,
             } => {
                 let container = FilesContainer {
+                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     version: *version,
                     files_map: files_map_into_repr_c(&files_map)?,
                     type_tag: *type_tag,
@@ -62,6 +66,7 @@ pub unsafe extern "C" fn fetch(
                 o_container(user_data.0, &container);
             }
             SafeData::Wallet {
+                xorurl,
                 xorname,
                 type_tag,
                 balances,
@@ -69,6 +74,7 @@ pub unsafe extern "C" fn fetch(
                 resolved_from,
             } => {
                 let wallet = Wallet {
+                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     xorname: xorname.0,
                     type_tag: *type_tag,
                     balances: wallet_spendable_balances_into_repr_c(balances)?,
@@ -80,10 +86,12 @@ pub unsafe extern "C" fn fetch(
                 o_wallet(user_data.0, &wallet);
             }
             SafeData::SafeKey {
+                xorurl,
                 xorname,
                 resolved_from,
             } => {
                 let keys = SafeKey {
+                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     xorname: xorname.0,
                     resolved_from: nrs_map_container_info_into_repr_c(
                         &resolved_from.as_ref().unwrap(),
