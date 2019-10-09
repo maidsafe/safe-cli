@@ -1,9 +1,9 @@
 use super::ffi_structs::{
-    files_map_into_repr_c, nrs_map_container_info_into_repr_c,
-    wallet_spendable_balances_into_repr_c, FilesContainer, PublishedImmutableData, SafeKey, Wallet,
+    nrs_map_container_info_into_repr_c, wallet_spendable_balances_into_repr_c, FilesContainer,
+    NrsMapContainerInfo, PublishedImmutableData, SafeKey, Wallet,
 };
 use super::{ResultReturn, Safe};
-use ffi_utils::{catch_unwind_cb, from_c_str, FfiResult, OpaqueCtx};
+use ffi_utils::{catch_unwind_cb, from_c_str, vec_into_raw_parts, FfiResult, OpaqueCtx};
 use safe_api::fetch::SafeData;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
@@ -31,15 +31,20 @@ pub unsafe extern "C" fn fetch(
                 resolved_from,
                 media_type,
             } => {
+                let (data, data_len, data_cap) = vec_into_raw_parts(data.to_vec());
                 let published_data = PublishedImmutableData {
                     xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     xorname: xorname.0,
-                    data: data.as_ptr(),
-                    data_len: data.len(),
-                    resolved_from: nrs_map_container_info_into_repr_c(
-                        &resolved_from.as_ref().unwrap(),
-                    )?,
-                    media_type: CString::new(media_type.clone().unwrap())?.as_ptr(),
+                    data,
+                    data_len,
+                    data_cap,
+                    resolved_from: match resolved_from {
+                        Some(nrs_container_map) => {
+                            nrs_map_container_info_into_repr_c(&nrs_container_map)?
+                        }
+                        None => NrsMapContainerInfo::new()?,
+                    },
+                    media_type: CString::new(media_type.clone().unwrap())?.into_raw(),
                 };
                 o_published(user_data.0, &published_data);
             }
@@ -52,16 +57,20 @@ pub unsafe extern "C" fn fetch(
                 data_type,
                 resolved_from,
             } => {
+                let files_map_json = serde_json::to_string(&files_map)?;
                 let container = FilesContainer {
                     xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     version: *version,
-                    files_map: files_map_into_repr_c(&files_map)?,
+                    files_map: CString::new(files_map_json)?.into_raw(),
                     type_tag: *type_tag,
                     xorname: xorname.0,
                     data_type: (*data_type).clone() as u64,
-                    resolved_from: nrs_map_container_info_into_repr_c(
-                        &resolved_from.as_ref().unwrap(),
-                    )?,
+                    resolved_from: match resolved_from {
+                        Some(nrs_container_map) => {
+                            nrs_map_container_info_into_repr_c(&nrs_container_map)?
+                        }
+                        None => NrsMapContainerInfo::new()?,
+                    },
                 };
                 o_container(user_data.0, &container);
             }
@@ -79,9 +88,12 @@ pub unsafe extern "C" fn fetch(
                     type_tag: *type_tag,
                     balances: wallet_spendable_balances_into_repr_c(balances)?,
                     data_type: (*data_type).clone() as u64,
-                    resolved_from: nrs_map_container_info_into_repr_c(
-                        &resolved_from.as_ref().unwrap(),
-                    )?,
+                    resolved_from: match resolved_from {
+                        Some(nrs_container_map) => {
+                            nrs_map_container_info_into_repr_c(&nrs_container_map)?
+                        }
+                        None => NrsMapContainerInfo::new()?,
+                    },
                 };
                 o_wallet(user_data.0, &wallet);
             }
@@ -93,9 +105,12 @@ pub unsafe extern "C" fn fetch(
                 let keys = SafeKey {
                     xorurl: CString::new(xorurl.clone())?.as_ptr(),
                     xorname: xorname.0,
-                    resolved_from: nrs_map_container_info_into_repr_c(
-                        &resolved_from.as_ref().unwrap(),
-                    )?,
+                    resolved_from: match resolved_from {
+                        Some(nrs_container_map) => {
+                            nrs_map_container_info_into_repr_c(&nrs_container_map)?
+                        }
+                        None => NrsMapContainerInfo::new()?,
+                    },
                 };
                 o_keys(user_data.0, &keys);
             }
