@@ -33,7 +33,7 @@ pub unsafe extern "C" fn fetch(
             } => {
                 let (data, data_len, data_cap) = vec_into_raw_parts(data.to_vec());
                 let published_data = PublishedImmutableData {
-                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
+                    xorurl: CString::new(xorurl.clone())?.into_raw(),
                     xorname: xorname.0,
                     data,
                     data_len,
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn fetch(
             } => {
                 let files_map_json = serde_json::to_string(&files_map)?;
                 let container = FilesContainer {
-                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
+                    xorurl: CString::new(xorurl.clone())?.into_raw(),
                     version: *version,
                     files_map: CString::new(files_map_json)?.into_raw(),
                     type_tag: *type_tag,
@@ -83,7 +83,7 @@ pub unsafe extern "C" fn fetch(
                 resolved_from,
             } => {
                 let wallet = Wallet {
-                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
+                    xorurl: CString::new(xorurl.clone())?.into_raw(),
                     xorname: xorname.0,
                     type_tag: *type_tag,
                     balances: wallet_spendable_balances_into_repr_c(balances)?,
@@ -103,7 +103,7 @@ pub unsafe extern "C" fn fetch(
                 resolved_from,
             } => {
                 let keys = SafeKey {
-                    xorurl: CString::new(xorurl.clone())?.as_ptr(),
+                    xorurl: CString::new(xorurl.clone())?.into_raw(),
                     xorname: xorname.0,
                     resolved_from: match resolved_from {
                         Some(nrs_container_map) => {
