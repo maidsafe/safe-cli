@@ -61,7 +61,7 @@ pub fn bls_key_pair_into_repr_c(key_pair: &NativeBlsKeyPair) -> Result<BlsKeyPai
 pub struct SafeKey {
     pub xorurl: *const c_char,
     pub xorname: XorNameArray,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const NrsMapContainerInfo,
 }
 
 impl Drop for SafeKey {
@@ -81,7 +81,7 @@ pub struct Wallet {
     pub type_tag: u64,
     pub balances: WalletSpendableBalances,
     pub data_type: u64,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const NrsMapContainerInfo,
 }
 
 impl Drop for Wallet {
@@ -102,7 +102,7 @@ pub struct FilesContainer {
     pub version: u64,
     pub files_map: FilesMap,
     pub data_type: u64,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const NrsMapContainerInfo,
 }
 
 impl Drop for FilesContainer {
@@ -121,7 +121,7 @@ pub struct PublishedImmutableData {
     pub xorname: XorNameArray,
     pub data: *const u8,
     pub data_len: usize,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const NrsMapContainerInfo,
     pub media_type: *const c_char,
 }
 
@@ -166,21 +166,6 @@ impl Drop for XorUrlEncoder {
                 let _ = CString::from_raw(self.sub_names as *mut _);
             }
         }
-    }
-}
-
-impl XorUrlEncoder {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            encoding_version: 0,
-            xorname: [0; 32],
-            type_tag: 0,
-            data_type: 0,
-            content_type: 0,
-            path: CString::new(String::new())?.into_raw(),
-            sub_names: CString::new(String::new())?.into_raw(),
-            content_version: 0,
-        })
     }
 }
 
@@ -538,20 +523,6 @@ impl Drop for NrsMapContainerInfo {
                 let _ = CString::from_raw(self.nrs_map as *mut _);
             }
         }
-    }
-}
-
-impl NrsMapContainerInfo {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            public_name: CString::new(String::new())?.into_raw(),
-            xorurl: CString::new(String::new())?.into_raw(),
-            xorname: [0; 32],
-            type_tag: 0,
-            version: 0,
-            nrs_map: CString::new(String::new())?.into_raw(),
-            data_type: 0,
-        })
     }
 }
 

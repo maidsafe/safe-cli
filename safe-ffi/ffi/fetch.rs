@@ -9,14 +9,14 @@
 use super::errors::{Error, Result};
 use super::ffi_structs::{
     files_map_into_repr_c, nrs_map_container_info_into_repr_c,
-    wallet_spendable_balances_into_repr_c, FilesContainer, NrsMapContainerInfo,
-    PublishedImmutableData, SafeKey, Wallet,
+    wallet_spendable_balances_into_repr_c, FilesContainer, PublishedImmutableData, SafeKey, Wallet,
 };
 use ffi_utils::{catch_unwind_cb, vec_into_raw_parts, FfiResult, NativeResult, OpaqueCtx, ReprC};
 use safe_api::fetch::SafeData;
 use safe_api::Safe;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
+use std::ptr;
 
 #[no_mangle]
 pub unsafe extern "C" fn fetch(
@@ -88,17 +88,21 @@ unsafe fn invoke_callback(
             resolved_from,
             media_type,
         }) => {
+            let nrs_container_map = if let Some(nrs_container_map) = resolved_from {
+                Some(nrs_map_container_info_into_repr_c(&nrs_container_map)?)
+            } else {
+                None
+            };
             let (data, data_len) = vec_into_raw_parts(data.to_vec());
             let published_data = PublishedImmutableData {
                 xorurl: CString::new(xorurl.clone())?.into_raw(),
                 xorname: xorname.0,
                 data,
                 data_len,
-                resolved_from: match resolved_from {
-                    Some(nrs_container_map) => {
-                        nrs_map_container_info_into_repr_c(&nrs_container_map)?
-                    }
-                    None => NrsMapContainerInfo::new()?,
+                resolved_from: if let Some(val) = nrs_container_map {
+                    &val
+                } else {
+                    ptr::null()
                 },
                 media_type: CString::new(media_type.clone().unwrap())?.into_raw(),
             };
@@ -113,6 +117,11 @@ unsafe fn invoke_callback(
             data_type,
             resolved_from,
         }) => {
+            let nrs_container_map = if let Some(nrs_container_map) = resolved_from {
+                Some(nrs_map_container_info_into_repr_c(&nrs_container_map)?)
+            } else {
+                None
+            };
             let container = FilesContainer {
                 xorurl: CString::new(xorurl.clone())?.into_raw(),
                 version: *version,
@@ -120,11 +129,10 @@ unsafe fn invoke_callback(
                 type_tag: *type_tag,
                 xorname: xorname.0,
                 data_type: (*data_type).clone() as u64,
-                resolved_from: match resolved_from {
-                    Some(nrs_container_map) => {
-                        nrs_map_container_info_into_repr_c(&nrs_container_map)?
-                    }
-                    None => NrsMapContainerInfo::new()?,
+                resolved_from: if let Some(val) = nrs_container_map {
+                    &val
+                } else {
+                    ptr::null()
                 },
             };
             o_container(user_data.0, &container);
@@ -137,17 +145,21 @@ unsafe fn invoke_callback(
             data_type,
             resolved_from,
         }) => {
+            let nrs_container_map = if let Some(nrs_container_map) = resolved_from {
+                Some(nrs_map_container_info_into_repr_c(&nrs_container_map)?)
+            } else {
+                None
+            };
             let wallet = Wallet {
                 xorurl: CString::new(xorurl.clone())?.into_raw(),
                 xorname: xorname.0,
                 type_tag: *type_tag,
                 balances: wallet_spendable_balances_into_repr_c(balances)?,
                 data_type: (*data_type).clone() as u64,
-                resolved_from: match resolved_from {
-                    Some(nrs_container_map) => {
-                        nrs_map_container_info_into_repr_c(&nrs_container_map)?
-                    }
-                    None => NrsMapContainerInfo::new()?,
+                resolved_from: if let Some(val) = nrs_container_map {
+                    &val
+                } else {
+                    ptr::null()
                 },
             };
             o_wallet(user_data.0, &wallet);
@@ -157,14 +169,18 @@ unsafe fn invoke_callback(
             xorname,
             resolved_from,
         }) => {
+            let nrs_container_map = if let Some(nrs_container_map) = resolved_from {
+                Some(nrs_map_container_info_into_repr_c(&nrs_container_map)?)
+            } else {
+                None
+            };
             let keys = SafeKey {
                 xorurl: CString::new(xorurl.clone())?.into_raw(),
                 xorname: xorname.0,
-                resolved_from: match resolved_from {
-                    Some(nrs_container_map) => {
-                        nrs_map_container_info_into_repr_c(&nrs_container_map)?
-                    }
-                    None => NrsMapContainerInfo::new()?,
+                resolved_from: if let Some(val) = nrs_container_map {
+                    &val
+                } else {
+                    ptr::null()
                 },
             };
             o_keys(user_data.0, &keys);
