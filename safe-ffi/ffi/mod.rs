@@ -1,5 +1,15 @@
-mod errors;
+// Copyright 2019 MaidSafe.net limited.
+//
+// This SAFE Network Software is licensed to you under The General Public License (GPL), version 3.
+// Unless required by applicable law or agreed to in writing, the SAFE Network Software distributed
+// under the GPL Licence is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied. Please review the Licences for the specific language governing
+// permissions and limitations relating to use of the SAFE Network Software.
+
+#![allow(clippy::missing_safety_doc)]
+
 /// Fetch API
+mod errors;
 pub mod fetch;
 pub mod ffi_structs;
 pub mod files;
@@ -26,7 +36,7 @@ pub unsafe extern "C" fn connect(
         let user_data = OpaqueCtx(user_data);
         let app_id = String::clone_from_repr_c(app_id)?;
         let auth_cred = from_c_str_to_str_option(auth_credentials);
-        let mut safe = Safe::new("");
+        let mut safe = Safe::default();
         safe.connect(&app_id, auth_cred)?;
         o_cb(user_data.0, FFI_RESULT_OK, Box::into_raw(Box::new(safe)));
         Ok(())
