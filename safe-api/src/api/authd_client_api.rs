@@ -211,11 +211,13 @@ impl SafeAuthdClient {
     }
 
     // Send a login action request to remote authd endpoint
-    pub fn log_in(&mut self, secret: &str, password: &str) -> Result<()> {
+    pub fn log_in(&mut self, passphrase: &str, password: &str) -> Result<()> {
         debug!("Attempting to log in on remote authd...");
+        let passphrase_encoded = urlencoding::encode(passphrase);
+        let password_encoded = urlencoding::encode(password);
         let authd_service_url = format!(
             "{}/{}{}/{}",
-            self.authd_endpoint, SAFE_AUTHD_ENDPOINT_LOGIN, secret, password
+            self.authd_endpoint, SAFE_AUTHD_ENDPOINT_LOGIN, passphrase_encoded, password_encoded
         );
 
         info!(
@@ -249,11 +251,17 @@ impl SafeAuthdClient {
     }
 
     // Sends an account creation request to the SAFE Authenticator
-    pub fn create_acc(&self, sk: &str, secret: &str, password: &str) -> Result<()> {
+    pub fn create_acc(&self, sk: &str, passphrase: &str, password: &str) -> Result<()> {
         debug!("Attempting to create a SAFE account on remote authd...");
+        let passphrase_encoded = urlencoding::encode(passphrase);
+        let password_encoded = urlencoding::encode(password);
         let authd_service_url = format!(
             "{}/{}{}/{}/{}",
-            self.authd_endpoint, SAFE_AUTHD_ENDPOINT_CREATE, secret, password, sk
+            self.authd_endpoint,
+            SAFE_AUTHD_ENDPOINT_CREATE,
+            passphrase_encoded,
+            password_encoded,
+            sk
         );
 
         debug!("Sending account creation request to SAFE Authenticator...");
@@ -506,6 +514,8 @@ impl SafeAuthdClient {
         Ok(())
     }
 }
+
+// Private helpers
 
 fn send_unsubscribe(endpoint_url: &str, endpoint: &str) -> Result<String> {
     let url_encoded = urlencoding::encode(endpoint_url);

@@ -16,12 +16,14 @@ pub fn process_req(
         Err("Incorrect number of arguments for 'login' action".to_string())
     } else {
         println!("Logging in to SAFE account...");
-        let secret = args[0];
-        let password = args[1];
+        let passphrase = urlencoding::decode(args[0])
+            .map_err(|_| "The passphrase couldn't be decoded from the request".to_string())?;
+        let password = urlencoding::decode(args[1])
+            .map_err(|_| "The password couldn't be decoded from the request".to_string())?;
 
         lock_safe_authenticator(
             safe_auth_handle,
-            |safe_authenticator| match safe_authenticator.log_in(secret, password) {
+            |safe_authenticator| match safe_authenticator.log_in(&passphrase, &password) {
                 Ok(_) => {
                     let msg = "Logged in successfully!";
                     println!("{}", msg);

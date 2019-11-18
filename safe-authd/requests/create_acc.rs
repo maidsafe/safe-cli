@@ -16,13 +16,15 @@ pub fn process_req(
         Err("Incorrect number of arguments for 'create' action".to_string())
     } else {
         println!("Creating an account in SAFE...");
-        let secret = args[0];
-        let password = args[1];
+        let passphrase = urlencoding::decode(args[0])
+            .map_err(|_| "The passphrase couldn't be decoded from the request".to_string())?;
+        let password = urlencoding::decode(args[1])
+            .map_err(|_| "The password couldn't be decoded from the request".to_string())?;
         let sk = args[2];
 
         lock_safe_authenticator(
             safe_auth_handle,
-            |safe_authenticator| match safe_authenticator.create_acc(sk, secret, password) {
+            |safe_authenticator| match safe_authenticator.create_acc(sk, &passphrase, &password) {
                 Ok(_) => {
                     let msg = "Account created successfully";
                     println!("{}", msg);
