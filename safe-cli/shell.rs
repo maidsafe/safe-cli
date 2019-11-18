@@ -15,7 +15,7 @@ use std::io::{stdout, Write};
 const AUTH_REQS_NOTIFS_ENDPOINT: &str = "https://localhost:33001";
 
 pub fn shell_run() -> Result<(), String> {
-    let safe = Safe::new("");
+    let safe = Safe::default();
     let safe_authd_client = SafeAuthdClient::new(None);
     let mut shell = Shell::new((safe, safe_authd_client));
     shell.set_default(|io, _, cmd| {
@@ -38,14 +38,23 @@ pub fn shell_run() -> Result<(), String> {
             }
         },
     );
-    shell.new_command_noargs(
+    shell.new_command(
         "auth-create",
         "Send request to a remote Authenticator daemon to create a new SAFE account",
-        |io, (safe, safe_authd_client)| match authd_create(safe, safe_authd_client, None, true) {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                writeln!(io, "{}", err)?;
-                Ok(())
+        0,
+        |io, (safe, safe_authd_client), args| {
+            let config_file = if args.is_empty() {
+                None
+            } else {
+                Some(args[0].to_string())
+            };
+
+            match authd_create(safe, safe_authd_client, config_file, None, true) {
+                Ok(()) => Ok(()),
+                Err(err) => {
+                    writeln!(io, "{}", err)?;
+                    Ok(())
+                }
             }
         },
     );
@@ -60,14 +69,23 @@ pub fn shell_run() -> Result<(), String> {
             }
         },
     );
-    shell.new_command_noargs(
+    shell.new_command(
         "auth-login",
         "Send request to a remote Authenticator daemon to login to a SAFE account",
-        |io, (_, safe_authd_client)| match authd_login(safe_authd_client) {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                writeln!(io, "{}", err)?;
-                Ok(())
+        0,
+        |io, (_, safe_authd_client), args| {
+            let config_file = if args.is_empty() {
+                None
+            } else {
+                Some(args[0].to_string())
+            };
+
+            match authd_login(safe_authd_client, config_file) {
+                Ok(()) => Ok(()),
+                Err(err) => {
+                    writeln!(io, "{}", err)?;
+                    Ok(())
+                }
             }
         },
     );
