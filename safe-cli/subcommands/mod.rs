@@ -28,10 +28,12 @@ use auth::AuthSubCommands;
 
 use structopt::StructOpt;
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum OutputFmt {
     Pretty,
     Json,
+    JsonPretty,
+    Yaml
 }
 
 #[derive(StructOpt, Debug)]

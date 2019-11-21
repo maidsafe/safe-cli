@@ -8,7 +8,7 @@
 
 use structopt::StructOpt;
 
-use super::helpers::{get_from_arg_or_stdin, get_secret_key, parse_tx_id};
+use super::helpers::{get_from_arg_or_stdin, get_secret_key, parse_tx_id, serialize_output};
 use super::keys::{create_new_key, print_new_key_output};
 use super::OutputFmt;
 use log::debug;
@@ -154,17 +154,9 @@ pub fn wallet_commander(
                     );
                 }
             } else if let Some(pair) = &key_generated_output.1 {
-                println!(
-                    "{}",
-                    serde_json::to_string(&(&wallet_xorurl, &key_generated_output.0, pair))
-                        .unwrap_or_else(|_| "Failed to serialise output to json".to_string())
-                );
+                println!("{}", serialize_output(&(&wallet_xorurl, &key_generated_output.0, pair), output_fmt));
             } else {
-                println!(
-                    "{}",
-                    serde_json::to_string(&(&wallet_xorurl, &key_generated_output.0))
-                        .unwrap_or_else(|_| "Failed to serialise output to json".to_string())
-                );
+                println!("{}", serialize_output(&(&wallet_xorurl, &key_generated_output.0), output_fmt));
             }
 
             Ok(())
