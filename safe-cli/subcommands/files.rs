@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::helpers::{get_from_arg_or_stdin, notice_dry_run, serialize_output};
+use super::helpers::{get_from_arg_or_stdin, notice_dry_run, serialise_output};
 use super::OutputFmt;
 use prettytable::{format::FormatBuilder, Table};
 use safe_api::{Safe, XorUrl, XorUrlEncoder};
@@ -229,7 +229,7 @@ fn print_serialized_output(
         }
         Err(_) => xorurl,
     };
-    println!("{}", serialize_output(&(url, processed_files), output_fmt));
+    println!("{}", serialise_output(&(url, processed_files), output_fmt));
 
     Ok(())
 }
