@@ -154,9 +154,15 @@ pub fn wallet_commander(
                     );
                 }
             } else if let Some(pair) = &key_generated_output.1 {
-                println!("{}", serialise_output(&(&wallet_xorurl, &key_generated_output.0, pair), output_fmt));
+                println!(
+                    "{}",
+                    serialise_output(&(&wallet_xorurl, &key_generated_output.0, pair), output_fmt)
+                );
             } else {
-                println!("{}", serialise_output(&(&wallet_xorurl, &key_generated_output.0), output_fmt));
+                println!(
+                    "{}",
+                    serialise_output(&(&wallet_xorurl, &key_generated_output.0), output_fmt)
+                );
             }
 
             Ok(())

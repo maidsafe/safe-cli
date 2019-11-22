@@ -156,6 +156,9 @@ fn print_summary(
         println!("{}: \"{}\"", header_msg, xorurl);
         table.printstd();
     } else {
-        println!("{}", serialise_output(&(xorurl, processed_entries), output_fmt));
+        println!(
+            "{}",
+            serialise_output(&(xorurl, processed_entries), output_fmt)
+        );
     }
 }

@@ -32,8 +32,8 @@ use structopt::StructOpt;
 pub enum OutputFmt {
     Pretty,
     Json,
-    JsonPretty,
-    Yaml
+    JsonCompact,
+    Yaml,
 }
 
 #[derive(StructOpt, Debug)]
