@@ -90,7 +90,7 @@ pub fn parse_tx_id(src: &str) -> Result<u64, String> {
 }
 
 // serialize structured value using any format from OutputFmt
-pub fn serialize_output<T: ?Sized>(value: &T, fmt: OutputFmt) -> String
+pub fn serialise_output<T: ?Sized>(value: &T, fmt: OutputFmt) -> String
 where
     T: Serialize,
 {

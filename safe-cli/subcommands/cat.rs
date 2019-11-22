@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::helpers::{get_from_arg_or_stdin,serialize_output};
+use super::helpers::{get_from_arg_or_stdin,serialise_output};
 use super::OutputFmt;
 use crate::operations::safe_net::connect;
 use log::debug;
@@ -61,7 +61,7 @@ pub fn cat_commander(
                 });
                 table.printstd();
             } else {
-                println!("{}", serialize_output(&(url, files_map), output_fmt));
+                println!("{}", serialise_output(&(url, files_map), output_fmt));
             }
         }
         SafeData::PublishedImmutableData { data, .. } => {
@@ -87,7 +87,7 @@ pub fn cat_commander(
                 });
                 table.printstd();
             } else {
-                println!("{}", serialize_output(&(url, balances), output_fmt));
+                println!("{}", serialise_output(&(url, balances), output_fmt));
             }
         }
         SafeData::SafeKey { .. } => {

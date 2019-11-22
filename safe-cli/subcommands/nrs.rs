@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::helpers::{get_from_arg_or_stdin, notice_dry_run, serialize_output};
+use super::helpers::{get_from_arg_or_stdin, notice_dry_run, serialise_output};
 use super::OutputFmt;
 use prettytable::{format::FormatBuilder, Table};
 use safe_api::{Safe, XorUrl};
@@ -156,6 +156,6 @@ fn print_summary(
         println!("{}: \"{}\"", header_msg, xorurl);
         table.printstd();
     } else {
-        println!("{}", serialize_output(&(xorurl, processed_entries), output_fmt));
+        println!("{}", serialise_output(&(xorurl, processed_entries), output_fmt));
     }
 }
