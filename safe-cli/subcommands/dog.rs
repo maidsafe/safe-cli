@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::helpers::{get_from_arg_or_stdin, xorname_to_hex, serialise_output};
+use super::helpers::{get_from_arg_or_stdin, serialise_output, xorname_to_hex};
 use super::OutputFmt;
 use crate::operations::safe_net::connect;
 use log::debug;
@@ -59,7 +59,7 @@ pub fn dog_commander(
                         "type_tag": type_tag,
                         "xorname": xorname_to_hex(xorname)
                     }
-                ]); 
+                ]);
                 println!("{}", serialise_output(&jsonv, output_fmt));
             }
         }
@@ -89,7 +89,7 @@ pub fn dog_commander(
                         "media_type": media_type.clone().unwrap_or_else(|| "Unknown".to_string()),
                         "xorname": xorname_to_hex(xorname)
                     }
-                ]); 
+                ]);
                 println!("{}", serialise_output(&jsonv, output_fmt));
             }
         }
@@ -117,7 +117,7 @@ pub fn dog_commander(
                         "type_type": type_tag,
                         "xorname": xorname_to_hex(xorname)
                     }
-                ]); 
+                ]);
                 println!("{}", serialise_output(&jsonv, output_fmt));
             }
         }
@@ -140,7 +140,7 @@ pub fn dog_commander(
                         "data_type": "SafeKey",
                         "xorname": xorname_to_hex(xorname)
                     }
-                ]); 
+                ]);
                 println!("{}", serialise_output(&jsonv, output_fmt));
             }
         }

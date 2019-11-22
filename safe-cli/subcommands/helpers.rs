@@ -6,11 +6,11 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use super::OutputFmt;
 use log::debug;
 use safe_api::XorName;
-use std::io::{self, stdin, stdout, Write};
-use super::OutputFmt;
 use serde::ser::Serialize;
+use std::io::{self, stdin, stdout, Write};
 
 // Warn the user about a dry-run being performed
 pub fn notice_dry_run() {
@@ -94,27 +94,16 @@ pub fn serialise_output<T: ?Sized>(value: &T, fmt: OutputFmt) -> String
 where
     T: Serialize,
 {
-
-    if fmt == OutputFmt::JsonPretty {
-        serde_json::to_string_pretty(&value)
-            .unwrap_or_else(|_| "Failed to serialise output to json".to_string())
+    match fmt {
+        OutputFmt::Json => serde_json::to_string_pretty(&value)
+            .unwrap_or_else(|_| "Failed to serialise output to json".to_string()),
+        OutputFmt::JsonCompact => serde_json::to_string(&value)
+            .unwrap_or_else(|_| "Failed to serialise output to json".to_string()),
+        OutputFmt::Yaml => serde_yaml::to_string(&value)
+            .unwrap_or_else(|_| "Failed to serialise output to yaml".to_string()),
+        OutputFmt::Pretty => {
+            // For now we panic.  maybe make a default Pretty output later.
+            panic!("Pretty format must be handled by caller")
+        }
     }
-    else if fmt == OutputFmt::Yaml {
-        serde_yaml::to_string(&value)
-            .unwrap_or_else(|_| "Failed to serialise output to yaml".to_string())
-    }
-    else if fmt == OutputFmt::Json {
-        serde_json::to_string(&value)
-            .unwrap_or_else(|_| "Failed to serialise output to json".to_string())
-    }
-    else if fmt == OutputFmt::Pretty {
-        // For now we panic.  maybe make a default Pretty output later.
-        panic!("Pretty format must be handled by caller")
-    }
-    else {
-        // We should only get in here if a new OutputFmt enum was added and not
-        // handled above.
-        panic!("Unable to serialize output.  Unknown format")
-    }
-
 }
