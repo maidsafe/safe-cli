@@ -111,10 +111,12 @@ jobs:
         with:
           command: build
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
-      - shell: bash
-        with:
-          command: ./resources/notarize
-          args: ${{ matrix.component }}-${{ matrix.target }}
+      - name: Sign & Notarize
+        shell: bash
+        run: ./resources/notarize ${{ matrix.component }}-${{ matrix.target }}
+        # with:
+        #   command: ./resources/notarize
+        #   args: ${{ matrix.component }}-${{ matrix.target }}
       - uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.component }}-${{ matrix.target }}.zip
