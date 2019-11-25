@@ -1,0 +1,181 @@
+name: Master_PR_Preview(removeme and update master!)
+
+on: [pull_request]
+
+jobs:
+  build-components:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        component: [safe-cli, safe-ffi]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
+      #     path: target/release
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: >
+            --release --manifest-path=${{ matrix.component }}/Cargo.toml
+            --features=fake-auth,mock-network
+      - shell: bash
+        run: |
+          mkdir artifacts
+          find "target/release" -maxdepth 1 -type f -exec cp '{}' artifacts \;
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-dev
+      #     path: artifacts
+
+  build-mac-components:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+        component: [safe-cli, safe-ffi]
+        include:
+          - os: mac-latest
+            target: x86_64-apple-darwin
+    steps:
+      - name: Install libsodium
+        shell: bash
+        run: brew install libsodium && brew install pkg-config
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          env:
+            RUST_SODIUM_USE_PKG_CONFIG : 1
+          command: build
+          args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
+      #     path: target/release
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: >
+            --release --manifest-path=${{ matrix.component }}/Cargo.toml
+            --features=fake-auth,mock-network
+      - shell: bash
+        run: |
+          mkdir artifacts
+          find "target/release" -maxdepth 1 -type f -exec cp '{}' artifacts \;
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-dev
+      #     path: artifacts
+
+  build-ffi-android:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [armv7-linux-androideabi, x86_64-linux-android]
+        type: [dev, prod]
+    env:
+      SAFE_API_BUILD_COMPONENT: safe-ffi
+      SAFE_API_BUILD_TYPE: ${{ matrix.type }}
+      SAFE_API_BUILD_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v1
+      - shell: bash
+        run: make build-component
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: safe-ffi-${{ matrix.target }}-${{ matrix.type }}
+      #     path: artifacts
+
+
+
+  build-ffi-ios:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [aarch64-apple-ios, x86_64-apple-ios]
+    env:
+      #RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
+      DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
+      RUST_SODIUM_USE_PKG_CONFIG: 1
+    steps:
+      - shell: bash
+        run: |
+          brew install curl
+          brew install libsodium
+          brew install pkg-config
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          target: ${{ matrix.target }}
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: safe-ffi-${{ matrix.target }}-prod
+      #     path: target/${{ matrix.target }}/release
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }} --features=mock-network
+      - shell: bash
+        run: |
+          mkdir artifacts
+          find "target/${{ matrix.target }}/release" -maxdepth 1 -type f -exec cp '{}' artifacts \;
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: safe-ffi-${{ matrix.target }}-dev
+      #     path: target/${{ matrix.target }}/release
+
+  # build-ffi-ios-universal:
+  #   runs-on: macOS-latest
+  #   needs: build-ffi-ios
+  #   steps:
+  #     - uses: actions/checkout@v1
+  #     - uses: actions/download-artifact@master
+  #       with:
+  #         name: safe-ffi-x86_64-apple-ios-dev
+  #         path: artifacts/safe-ffi/dev/x86_64-apple-ios/release
+  #     - uses: actions/download-artifact@master
+  #       with:
+  #         name: safe-ffi-x86_64-apple-ios-prod
+  #         path: artifacts/safe-ffi/prod/x86_64-apple-ios/release
+  #     - uses: actions/download-artifact@master
+  #       with:
+  #         name: safe-ffi-aarch64-apple-ios-dev
+  #         path: artifacts/safe-ffi/dev/aarch64-apple-ios/release
+  #     - uses: actions/download-artifact@master
+  #       with:
+  #         name: safe-ffi-aarch64-apple-ios-prod
+  #         path: artifacts/safe-ffi/prod/aarch64-apple-ios/release
+  #     - shell: bash
+  #       run: make universal-ios-lib
+  #     - uses: actions/upload-artifact@master
+  #       with:
+  #         name: safe-ffi-apple-ios-dev
+  #         path: artifacts/safe-ffi/dev/universal
+  #     - uses: actions/upload-artifact@master
+  #       with:
+  #         name: safe-ffi-apple-ios-prod
+  #         path: artifacts/safe-ffi/prod/universal
