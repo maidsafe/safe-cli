@@ -229,6 +229,8 @@ jobs:
           override: true
           target: ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
+        env:
+          RUST_SODIUM_USE_PKG_CONFIG : 1
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
@@ -237,6 +239,8 @@ jobs:
       #     name: safe-ffi-${{ matrix.target }}-prod
       #     path: target/${{ matrix.target }}/release
       - uses: actions-rs/cargo@v1
+        env:
+          RUST_SODIUM_USE_PKG_CONFIG : 1
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }} --features=mock-network
