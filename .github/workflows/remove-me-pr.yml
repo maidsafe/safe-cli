@@ -113,7 +113,7 @@ jobs:
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
       - name: Sign & Notarize
         shell: bash
-        run: ./resources/notarize ${{ matrix.component }}-${{ matrix.target }}
+        run: ls && ls resources && ./resources/notarize.sh ${{ matrix.component }}-${{ matrix.target }}
         # with:
         #   command: ./resources/notarize
         #   args: ${{ matrix.component }}-${{ matrix.target }}
@@ -220,7 +220,8 @@ jobs:
     strategy:
       matrix:
         target: [aarch64-apple-ios, x86_64-apple-ios]
-    # env:
+    env:
+      RUST_SODIUM_USE_PKG_CONFIG : 1
       #RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
       # DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
     steps:
@@ -234,8 +235,8 @@ jobs:
           override: true
           target: ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
-        env:
-          RUST_SODIUM_USE_PKG_CONFIG : 1
+        # env:
+        #   RUST_SODIUM_USE_PKG_CONFIG : 1
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
