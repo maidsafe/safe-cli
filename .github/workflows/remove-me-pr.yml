@@ -214,12 +214,12 @@ jobs:
         target: [aarch64-apple-ios, x86_64-apple-ios]
     env:
       #RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
-      DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
-      RUST_SODIUM_USE_PKG_CONFIG: 1
+      # DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
     steps:
-      - shell: bash
-        run: brew install libsodium && brew install pkg-config
       - uses: actions/checkout@v1
+      - name: Install libsodium
+        shell: bash
+        run: brew install libsodium && brew install pkg-config
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
