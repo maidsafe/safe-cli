@@ -53,6 +53,8 @@ jobs:
           - os: mac-latest
             target: x86_64-apple-darwin
     steps:
+      env:
+        RUST_SODIUM_USE_PKG_CONFIG : 1
       - name: Install libsodium
         shell: bash
         run: brew install libsodium && brew install pkg-config
@@ -62,8 +64,6 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          env:
-            RUST_SODIUM_USE_PKG_CONFIG : 1
           command: build
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
       # - uses: actions/upload-artifact@master
