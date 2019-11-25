@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        component: [safe-cli, safe-ffi, safe-authd]
+        component: [safe-cli, safe-ffi]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -42,13 +42,53 @@ jobs:
       #   with:
       #     name: ${{ matrix.component }}-${{ matrix.target }}-dev
       #     path: artifacts
+      #
+  build-authd:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        component: [safe-authd]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
+      #     path: target/release
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: >
+            --release --manifest-path=${{ matrix.component }}/Cargo.toml
+            --features=mock-network
+      - shell: bash
+        run: |
+          mkdir artifacts
+          find "target/release" -maxdepth 1 -type f -exec cp '{}' artifacts \;
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-dev
+      #     path: artifacts
 
   build-mac-components:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-latest]
-        component: [safe-cli, safe-ffi, safe-authd]
+        component: [safe-cli, safe-ffi]
         include:
           - os: mac-latest
             target: x86_64-apple-darwin
@@ -84,6 +124,56 @@ jobs:
           args: >
             --release --manifest-path=${{ matrix.component }}/Cargo.toml
             --features=fake-auth,mock-network
+      - shell: bash
+        run: |
+          mkdir artifacts
+          find "target/release" -maxdepth 1 -type f -exec cp '{}' artifacts \;
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-dev
+      #     path: artifacts
+
+  build-mac-authd:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+        component: [safe-authd]
+        include:
+          - os: mac-latest
+            target: x86_64-apple-darwin
+    steps:
+      - name: Install libsodium
+        shell: bash
+        run: brew install libsodium && brew install pkg-config
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: ls current dir
+        shell: bash
+        run: ls -la
+      - uses: actions-rs/cargo@v1
+        env:
+          RUST_SODIUM_USE_PKG_CONFIG : 1
+        with:
+          command: build
+          args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
+      # - uses: actions/upload-artifact@master
+      #   with:
+      #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
+      #     path: target/release
+      - name: ls current dir
+        shell: bash
+        run: ls -la
+      - uses: actions-rs/cargo@v1
+        env:
+          RUST_SODIUM_USE_PKG_CONFIG : 1
+        with:
+          command: build
+          args: >
+            --release --manifest-path=${{ matrix.component }}/Cargo.toml
+            --features=mock-network
       - shell: bash
         run: |
           mkdir artifacts
