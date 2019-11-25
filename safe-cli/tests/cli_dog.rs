@@ -91,8 +91,8 @@ fn calling_safe_dog_files_container_nrsurl_jsoncompact() {
         .read()
         .unwrap();
 
-    let content_info: (String, SafeData) = serde_json::from_str(&dog_output)
-        .expect("Failed to parse output of `safe dog` with -ii on file");
+    let content_info: (String, SafeData) =
+        serde_json::from_str(&dog_output).expect("Failed to parse output of `safe dog`");
     assert_eq!(content_info.0, nrsurl);
     if let SafeData::FilesContainer { resolved_from, .. } = content_info.1 {
         let unwrapped_resolved_from = resolved_from.unwrap();
@@ -134,8 +134,8 @@ fn calling_safe_dog_files_container_nrsurl_yaml() {
         .read()
         .unwrap();
 
-    let content_info: (String, SafeData) = serde_yaml::from_str(&dog_output)
-        .expect("Failed to parse output of `safe dog` with -ii on file");
+    let content_info: (String, SafeData) =
+        serde_yaml::from_str(&dog_output).expect("Failed to parse output of `safe dog`");
     assert_eq!(content_info.0, nrsurl);
     if let SafeData::FilesContainer { resolved_from, .. } = content_info.1 {
         let unwrapped_resolved_from = resolved_from.unwrap();
