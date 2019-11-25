@@ -111,10 +111,14 @@ jobs:
         with:
           command: build
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
-      # - uses: actions/upload-artifact@master
-      #   with:
-      #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
-      #     path: target/release
+      - shell: bash
+        with:
+          command: ./resources/notarize
+          args: ${{ matrix.component }}-${{ matrix.target }}
+      - uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.component }}-${{ matrix.target }}.zip
+          path: target/release
       - name: ls current dir
         shell: bash
         run: ls -la
@@ -162,9 +166,11 @@ jobs:
         with:
           command: build
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
+      # - shell: bash
+      #    run: ./resources/notarize ${{ matrix.component }}-${{ matrix.target }}
       # - uses: actions/upload-artifact@master
       #   with:
-      #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
+      #     name: ${{ matrix.component }}-${{ matrix.target }}.zip
       #     path: target/release
       - name: ls current dir
         shell: bash
@@ -232,7 +238,7 @@ jobs:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
       # - shell: bash
-      #   run: |
+      #   run: ./resources/build_app_location
       #   ditto -c -k --rsrc --keepParent Example.app Example.app.zip
       # - uses: actions/upload-artifact@master
       #   with:
