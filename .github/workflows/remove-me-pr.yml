@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        component: [safe-cli, safe-ffi]
+        component: [safe-cli, safe-ffi, safe-authd]
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -48,21 +48,24 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest]
-        component: [safe-cli, safe-ffi]
+        component: [safe-cli, safe-ffi, safe-authd]
         include:
           - os: mac-latest
             target: x86_64-apple-darwin
     steps:
       - name: Install libsodium
-        env:
-          RUST_SODIUM_USE_PKG_CONFIG : 1
         shell: bash
         run: brew install libsodium && brew install pkg-config
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
+      - name: ls current dir
+        shell: bash
+        run: ls -la
       - uses: actions-rs/cargo@v1
+        env:
+          RUST_SODIUM_USE_PKG_CONFIG : 1
         with:
           command: build
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
@@ -70,7 +73,12 @@ jobs:
       #   with:
       #     name: ${{ matrix.component }}-${{ matrix.target }}-prod
       #     path: target/release
+      - name: ls current dir
+        shell: bash
+        run: ls -la
       - uses: actions-rs/cargo@v1
+        env:
+          RUST_SODIUM_USE_PKG_CONFIG : 1
         with:
           command: build
           args: >
