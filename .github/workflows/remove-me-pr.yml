@@ -93,6 +93,10 @@ jobs:
         include:
           - os: mac-latest
             target: x86_64-apple-darwin
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_SIGN_ID: ${{ secrets.APPLE_SIGN_ID }}
+      APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
     steps:
       - uses: actions/checkout@v1
       - name: Install libsodium
@@ -132,6 +136,9 @@ jobs:
           args: >
             --release --manifest-path=${{ matrix.component }}/Cargo.toml
             --features=fake-auth,mock-network
+      - name: Sign & Notarize
+        shell: bash
+        run: ls && ls resources && ./resources/notarize.sh ${{ matrix.component }}-${{ matrix.target }}
       - shell: bash
         run: |
           mkdir artifacts
@@ -143,6 +150,10 @@ jobs:
 
   build-mac-authd:
     runs-on: ${{ matrix.os }}
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_SIGN_ID: ${{ secrets.APPLE_SIGN_ID }}
+      APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
     strategy:
       matrix:
         os: [macos-latest]
@@ -168,12 +179,13 @@ jobs:
         with:
           command: build
           args: --release --manifest-path=${{ matrix.component }}/Cargo.toml
-      # - shell: bash
-      #    run: ./resources/notarize ${{ matrix.component }}-${{ matrix.target }}
-      # - uses: actions/upload-artifact@master
-      #   with:
-      #     name: ${{ matrix.component }}-${{ matrix.target }}.zip
-      #     path: target/release
+      - name: Sign & Notarize
+        shell: bash
+        run: ls && ls resources && ./resources/notarize.sh ${{ matrix.component }}-${{ matrix.target }}
+      - uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.component }}-${{ matrix.target }}.zip
+          path: target/release
       - name: ls current dir
         shell: bash
         run: ls -la
