@@ -43,6 +43,7 @@ jobs:
       #     name: ${{ matrix.component }}-${{ matrix.target }}-dev
       #     path: artifacts
       #
+
   build-authd:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -93,6 +94,7 @@ jobs:
           - os: mac-latest
             target: x86_64-apple-darwin
     steps:
+      - uses: actions/checkout@v1
       - name: Install libsodium
         shell: bash
         run: brew install libsodium && brew install pkg-config
@@ -143,6 +145,7 @@ jobs:
           - os: mac-latest
             target: x86_64-apple-darwin
     steps:
+      - uses: actions/checkout@v1
       - name: Install libsodium
         shell: bash
         run: brew install libsodium && brew install pkg-config
