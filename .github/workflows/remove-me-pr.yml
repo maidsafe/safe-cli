@@ -220,7 +220,7 @@ jobs:
     strategy:
       matrix:
         target: [aarch64-apple-ios, x86_64-apple-ios]
-    env:
+    # env:
       #RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
       # DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
     steps:
