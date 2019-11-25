@@ -218,10 +218,7 @@ jobs:
       RUST_SODIUM_USE_PKG_CONFIG: 1
     steps:
       - shell: bash
-        run: |
-          brew install curl
-          brew install libsodium
-          brew install pkg-config
+        run: brew install libsodium && brew install pkg-config
       - uses: actions/checkout@v1
       - uses: actions-rs/toolchain@v1
         with:
@@ -234,6 +231,9 @@ jobs:
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
+      # - shell: bash
+      #   run: |
+      #   ditto -c -k --rsrc --keepParent Example.app Example.app.zip
       # - uses: actions/upload-artifact@master
       #   with:
       #     name: safe-ffi-${{ matrix.target }}-prod
