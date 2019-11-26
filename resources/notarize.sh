@@ -35,10 +35,25 @@ echo "Notarization: uploading $build_app_location.zip"
 # trigger the notarize
 xcrun altool --notarize-app -f "$build_app_location.zip" --primary-bundle-id "com.maidsafe.$build_app" -u "$APPLE_ID" -p "$APPLE_ID_PASSWORD" &> tmp
 
+echo "Upload response: "
+cat tmp
 echo 'Notarization: waiting.'
 # and wait for complete
 uuid=`cat tmp | grep -Eo '\w{8}-(\w{4}-){3}\w{12}$'`
-while true; do
+
+
+if [[ -z "$uuid" ]]; then
+    echo "There was an issue getting the UUID from response"
+    cat tmp
+    exit 1
+fi
+
+echo "UUID received: $uuid"
+
+TOTAL_WAIT_TIME=0
+TIMEOUT_SECONDS=1200 # 20mins * 60
+
+while [ "$TOTAL_WAIT_TIME" -lt "$TIMEOUT_SECONDS" ]; do
     echo "Checking notarization status"
 
     xcrun altool --notarization-info "$uuid" --username "$APPLE_ID" --password "$APPLE_ID_PASSWORD" &> tmp
@@ -59,5 +74,6 @@ while true; do
         exit 1
     fi
     echo "Waiting on notariation... sleep 2m then check again..."
+    TOTAL_WAIT_TIME=$(($TOTAL_WAIT_TIME + 120))
     sleep 120
 done
