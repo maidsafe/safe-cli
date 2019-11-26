@@ -237,6 +237,9 @@ jobs:
       #RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
       DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
     steps:
+      env:
+        RUST_SODIUM_USE_PKG_CONFIG : 1
+        RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
       - uses: actions/checkout@v1
       - name: Install libsodium
         shell: bash
@@ -247,8 +250,8 @@ jobs:
           override: true
           target: ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
-        # env:
-        #   RUST_SODIUM_USE_PKG_CONFIG : 1
+        command:
+      - uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
@@ -260,8 +263,6 @@ jobs:
       #     name: safe-ffi-${{ matrix.target }}-prod
       #     path: target/${{ matrix.target }}/release
       - uses: actions-rs/cargo@v1
-        env:
-          RUST_SODIUM_USE_PKG_CONFIG : 1
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }} --features=mock-network
