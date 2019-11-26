@@ -248,8 +248,6 @@ jobs:
           override: true
           target: ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
-        command:
-      - uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
