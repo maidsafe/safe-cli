@@ -168,7 +168,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        component: [api-tests, cli-tests]
+        component: [api-tests, cli-tests, e2e-authd-vault-tests]
     steps:
       - uses: actions/checkout@v1
       - uses: actions-rs/toolchain@v1
