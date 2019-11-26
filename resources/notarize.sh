@@ -43,6 +43,7 @@ while true; do
 
     xcrun altool --notarization-info "$uuid" --username "$APPLE_ID" --password "$APPLE_ID_PASSWORD" &> tmp
     r=`cat tmp`
+    echo "$r"
     t=`echo "$r" | grep "success"`
     f=`echo "$r" | grep "invalid"`
     if [[ "$t" != "" ]]; then
@@ -57,6 +58,6 @@ while true; do
         echo "$r"
         exit 1
     fi
-    echo "Waiting on notariation... sleep 1m then check again..."
-    sleep 60
+    echo "Waiting on notariation... sleep 2m then check again..."
+    sleep 120
 done
