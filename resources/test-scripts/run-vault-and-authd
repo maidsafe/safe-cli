@@ -46,7 +46,7 @@ function download_and_run_safe_vault() {
     mkdir $SAFE_VAULT_PATH
     cwd=$(pwd)
     cd $SAFE_VAULT_PATH
-    git clone https://github.com/lionel1704/safe_vault.git
+    git clone https://github.com/maidsafe/safe_vault.git
     cd safe_vault
     cargo build --release
     echo "Launching local safe_vault..."

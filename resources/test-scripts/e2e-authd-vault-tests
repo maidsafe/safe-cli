@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -e -x
-source ./resources/test-scripts/run-auth-daemon
+source ./resources/test-scripts/run-vault-and-authd
 
 # run the api tests with vault
-function run_api_tests_with_auth_daemon() {
+function run_api_tests_with_local_vault() {
     cd safe-api
     echo "Run let's run the api tests against local vault..."
     cargo test --lib --release --features=fake-auth
@@ -39,7 +39,7 @@ function run_cli_tests_with_auth_daemon() {
 }
 
 download_and_run_safe_vault
-run_api_tests_with_auth_daemon
+run_api_tests_with_local_vault
 build_safe_authd
 run_safe_authd
 run_cli_tests_with_auth_daemon
