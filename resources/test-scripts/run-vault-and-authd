@@ -17,22 +17,27 @@ case $uname_output in
 esac
 
 function download_and_run_safe_vault() {
+    rm -rf $SAFE_VAULT_PATH
+    mkdir $SAFE_VAULT_PATH
+    cwd=$(pwd)
+    cd $SAFE_VAULT_PATH
+
     vault_bin_name="safe_vault"
     case $uname_output in
         Linux*)
-            #curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.19.2/safe_vault-0.19.2-x86_64-unknown-linux-musl.tar.gz
-            #tar xvf safe_vault-0.19.2-x86_64-unknown-linux-musl.tar.gz
-            #rm safe_vault-0.19.2-x86_64-unknown-linux-musl.tar.gz
+            curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.20.1/safe_vault-0.20.1-x86_64-unknown-linux-musl.tar.gz
+            tar xvf safe_vault-0.20.1-x86_64-unknown-linux-musl.tar.gz
+            rm safe_vault-0.20.1-x86_64-unknown-linux-musl.tar.gz
             ;;
         Darwin*)
-            #curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.19.2/safe_vault-0.19.2-x86_64-apple-darwin.tar.gz
-            #tar xvf safe_vault-0.19.2-x86_64-apple-darwin.tar.gz
-            #rm safe_vault-0.19.2-x86_64-apple-darwin.tar.gz
+            curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.20.1/safe_vault-0.20.1-x86_64-apple-darwin.tar.gz
+            tar xvf safe_vault-0.20.1-x86_64-apple-darwin.tar.gz
+            rm safe_vault-0.20.1-x86_64-apple-darwin.tar.gz
             ;;
         MSYS_NT* | MINGW*)  # Windows in Jenkins and in GH Actions respectively
-            #curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.19.2/safe_vault-0.19.2-x86_64-pc-windows-gnu.tar.gz
-            #tar xvf safe_vault-0.19.2-x86_64-pc-windows-gnu.tar.gz
-            #rm safe_vault-0.19.2-x86_64-pc-windows-gnu.tar.gz
+            curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.20.1/safe_vault-0.20.1-x86_64-pc-windows-gnu.tar.gz
+            tar xvf safe_vault-0.20.1-x86_64-pc-windows-gnu.tar.gz
+            rm safe_vault-0.20.1-x86_64-pc-windows-gnu.tar.gz
             vault_bin_name="safe_vault.exe"
             ;;
         *)
@@ -40,21 +45,10 @@ function download_and_run_safe_vault() {
             exit 1
     esac
 
-    # temporarily build safe_vault from https://github.com/lionel1704/safe_vault.git
-    # untill a new version 0.20.0 is released which fixes https://github.com/maidsafe/safe-api/issues/322
-    rm -rf $SAFE_VAULT_PATH
-    mkdir $SAFE_VAULT_PATH
-    cwd=$(pwd)
-    cd $SAFE_VAULT_PATH
-    git clone https://github.com/maidsafe/safe_vault.git
-    cd safe_vault
-    cargo build --release
     echo "Launching local safe_vault..."
-    cargo run --release &
-    cd $cwd
-    # end of temporary code
+    ./$vault_bin_name &
 
-    # ./$vault_bin_name &
+    cd $cwd
 }
 
 function build_safe_authd() {
