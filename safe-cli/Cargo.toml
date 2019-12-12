@@ -40,6 +40,7 @@ serde_yaml = "0.8.11"
 shrust = "0.0.7"
 structopt = "0.2.18"
 pretty-hex = "0.1.1"
+qrcodegen = "1.5.0"
 
 [features]
 mock-network = ["safe-api/mock-network"]

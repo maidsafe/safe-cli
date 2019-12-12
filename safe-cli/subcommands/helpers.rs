@@ -8,6 +8,7 @@
 
 use super::OutputFmt;
 use log::debug;
+use qrcodegen::QrCode;
 use safe_api::XorName;
 use serde::ser::Serialize;
 use std::io::{self, stdin, stdout, Write};
@@ -106,4 +107,17 @@ where
             "OutputFmt::Pretty' not handled by caller, in serialise_output()".to_string()
         }
     }
+}
+
+// Prints the given QrCode object to the console.
+pub fn print_qr(qr: &QrCode) {
+    let border: i32 = 4;
+    for y in -border..qr.size() + border {
+        for x in -border..qr.size() + border {
+            let c: char = if qr.get_module(x, y) { '█' } else { ' ' };
+            print!("{0}{0}", c);
+        }
+        println!();
+    }
+    println!();
 }

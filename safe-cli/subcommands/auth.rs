@@ -6,9 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+extern crate qrcodegen;
+
+use super::helpers::print_qr;
 use crate::operations::auth_daemon::*;
 use crate::operations::safe_net::*;
 use crate::APP_ID;
+use qrcodegen::QrCode;
+use qrcodegen::QrCodeEcc;
 use safe_api::{AuthReq, Safe, SafeAuthdClient};
 use structopt::StructOpt;
 
@@ -97,6 +102,9 @@ pub enum AuthSubCommands {
     #[structopt(name = "restart")]
     /// Restarts the Authenticator daemon if it's running already
     Restart {},
+    #[structopt(name = "qr")]
+    /// Shows QR code
+    Qr {},
 }
 
 pub fn auth_commander(
@@ -197,6 +205,16 @@ pub fn auth_commander(
         Some(AuthSubCommands::Restart {}) => {
             let safe_authd = SafeAuthdClient::new(endpoint);
             authd_restart(&safe_authd)
+        }
+        Some(AuthSubCommands::Qr {}) => {
+            //Todo: maybe add a condition to check if logged in using the status function
+            // if not logged in, don't show the qr code
+            let safe_authd = SafeAuthdClient::new(endpoint);
+            let text = &safe_authd.authd_endpoint;
+            let errcorlvl: QrCodeEcc = QrCodeEcc::Low;
+            let qr: QrCode = QrCode::encode_text(text, errcorlvl).unwrap();
+            print_qr(&qr);
+            Ok(())
         }
         None => authorise_cli(safe, endpoint, false),
     }
