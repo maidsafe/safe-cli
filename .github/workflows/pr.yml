@@ -3,7 +3,10 @@ name: PR
 on: [pull_request]
 
 env:
+  # Run all cargo commands with --verbose.
+  CARGO_TERM_VERBOSE: true
   RUST_BACKTRACE: 1
+  # Deny all compiler warnings.
   RUSTFLAGS: "-D warnings"
 
 jobs:
@@ -18,10 +21,31 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt, clippy
+
+      # Check if the code is formatted correctly.
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
+
+      # Cache.
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run Clippy.
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
@@ -33,135 +57,155 @@ jobs:
     strategy:
       matrix:
         target: [armv7-linux-androideabi, x86_64-linux-android]
-        type: [dev, prod]
-    env:
-      SAFE_API_BUILD_COMPONENT: safe-ffi
-      SAFE_API_BUILD_TYPE: ${{ matrix.type }}
-      SAFE_API_BUILD_TARGET: ${{ matrix.target }}
+        component: [safe-ffi]
     steps:
       - uses: actions/checkout@v1
-      - shell: bash
-        run: make build-component
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: ${{ matrix.target }}
+
+      # Cache.
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Check if NDK bundle is installed and list files.
+      - name: Check Android NDK bundle
+        shell: bash
+        run: ls /usr/local/lib/android/sdk/ndk-bundle
+
+      # Setup NDK build toolchain for arm.
+      - if: matrix.target == 'armv7-linux-androideabi'
+        name: Setup NDK toolchain for armv7
+        shell: bash
+        run: |
+          mkdir toolchains
+          /usr/local/lib/android/sdk/ndk-bundle/build/tools/make_standalone_toolchain.py --arch arm --api 21 --install-dir toolchains --force
+          echo "::set-env name=CC_armv7_linux_androideabi::arm-linux-androideabi-clang"
+          echo "::set-env name=CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_LINKER::arm-linux-androideabi-clang"
+          echo "::add-path::$PWD/toolchains/bin"
+
+      # Setup NDK build toolchain for x86_64.
+      - if: matrix.target == 'x86_64-linux-android'
+        name: Setup NDK toolchain for x86_64
+        shell: bash
+        run: |
+          mkdir toolchains
+          /usr/local/lib/android/sdk/ndk-bundle/build/tools/make_standalone_toolchain.py --arch x86_64 --api 21 --install-dir toolchains --force
+          echo "::set-env name=CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER::x86_64-linux-android-gcc"
+          echo "::add-path::$PWD/toolchains/bin"
+
+      # Verify installed NDK toolchain for the target.
+      - name: Check Android NDK toolchain Files
+        shell: bash
+        run: ls toolchains
+      - name: Download Android Build Toolchain
+        shell: bash
+        run:  rustup target add ${{matrix.target}}
+
+      # Build prod native lib.
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --manifest-path=${{ matrix.component }}/Cargo.toml --target=${{ matrix.target }}
+
+      # Upload prod native lib.
       - uses: actions/upload-artifact@master
         with:
-          name: safe-ffi-${{ matrix.target }}-${{ matrix.type }}
-          path: artifacts
+          name: safe-ffi-${{ matrix.target }}-prod
+          path: target/${{ matrix.target }}/release/libsafe_ffi.so
 
-  #build-ffi-ios:
-    #name: Build FFI iOS
-    #runs-on: macOS-latest
-    #strategy:
-      #matrix:
-        #target: [aarch64-apple-ios, x86_64-apple-ios]
-    #env:
-      ##RUST_SODIUM_LIB_DIR: /Users/runner/libsodium
-      #DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
-    #steps:
-      # Remove when rust_sodium is dealt with.
-      #- shell: bash
-        #run: |
-          #brew install curl
-          #curl -O https://libsodium.s3.amazonaws.com/libsodium-1.0.17-stable-macos.tar.gz
-          #mkdir $HOME/libsodium
-          #mv libsodium-1.0.17-stable-macos.tar.gz $HOME/libsodium
-          #cd $HOME/libsodium
-          #tar xvf libsodium-1.0.17-stable-macos.tar.gz
-          #rm libsodium-1.0.17-stable-macos.tar.gz
-      #- uses: actions/checkout@v1
-      #- uses: actions-rs/toolchain@v1
-        #with:
-          #profile: minimal
-          #toolchain: stable
-          #override: true
-          #target: ${{ matrix.target }}
-      #- uses: actions-rs/cargo@v1
-        #with:
-          #command: build
-          #args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }}
-      #- uses: actions/upload-artifact@master
-        #with:
-          #name: safe-ffi-${{ matrix.target }}-prod
-          #path: target/${{ matrix.target }}/release
-      #- uses: actions-rs/cargo@v1
-        #with:
-          #command: build
-          #args: --release --manifest-path=safe-ffi/Cargo.toml --target=${{ matrix.target }} --features=mock-network
-      #- shell: bash
-        #run: |
-          #mkdir artifacts
-          #find "target/${{ matrix.target }}/release" -maxdepth 1 -type f -exec cp '{}' artifacts \;
-      #- uses: actions/upload-artifact@master
-        #with:
-          #name: safe-ffi-${{ matrix.target }}-dev
-          #path: target/${{ matrix.target }}/release
+      # Build dev native lib.
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: >
+            --release --manifest-path=${{ matrix.component }}/Cargo.toml --target=${{ matrix.target }}
+            --features=mock-network
 
-  #build-ffi-ios-universal:
-    #name: Build FFI iOS Universal
-    #runs-on: macOS-latest
-    #needs: build-ffi-ios
-    #steps:
-      #- uses: actions/checkout@v1
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-x86_64-apple-ios-dev
-          #path: artifacts/safe-ffi/dev/x86_64-apple-ios/release
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-x86_64-apple-ios-prod
-          #path: artifacts/safe-ffi/prod/x86_64-apple-ios/release
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-aarch64-apple-ios-dev
-          #path: artifacts/safe-ffi/dev/aarch64-apple-ios/release
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-aarch64-apple-ios-prod
-          #path: artifacts/safe-ffi/prod/aarch64-apple-ios/release
-      #- shell: bash
-        #run: make universal-ios-lib
-      #- uses: actions/upload-artifact@master
-        #with:
-          #name: safe-ffi-apple-ios-dev
-          #path: artifacts/safe-ffi/dev/universal
-      #- uses: actions/upload-artifact@master
-        #with:
-          #name: safe-ffi-apple-ios-prod
-          #path: artifacts/safe-ffi/prod/universal
+      # Upload dev native lib.
+      - uses: actions/upload-artifact@master
+        with:
+          name: safe-ffi-${{ matrix.target }}-dev
+          path: target/${{ matrix.target }}/release/libsafe_ffi.so
 
-  #build-ffi-ios-universal:
-    #name: Build FFI iOS Universal
-    #runs-on: macOS-latest
-    #needs: build-ffi-ios
-    #steps:
-      #- uses: actions/checkout@v1
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-x86_64-apple-ios-dev
-          #path: artifacts/safe-ffi/dev/x86_64-apple-ios/release
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-x86_64-apple-ios-prod
-          #path: artifacts/safe-ffi/prod/x86_64-apple-ios/release
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-aarch64-apple-ios-dev
-          #path: artifacts/safe-ffi/dev/aarch64-apple-ios/release
-      #- uses: actions/download-artifact@master
-        #with:
-          #name: safe-ffi-aarch64-apple-ios-prod
-          #path: artifacts/safe-ffi/prod/aarch64-apple-ios/release
-      #- shell: bash
-        #run: make universal-ios-lib
-      #- uses: actions/upload-artifact@master
-        #with:
-          #name: safe-ffi-apple-ios-dev
-          #path: artifacts/safe-ffi/dev/universal
-      #- uses: actions/upload-artifact@master
-        #with:
-          #name: safe-ffi-apple-ios-prod
-          #path: artifacts/safe-ffi/prod/universal
+  build-ffi-ios:
+    name: Build FFI iOS
+    runs-on: macos-latest
+    env:
+      PKG_CONFIG_ALLOW_CROSS: 1
+      DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: aarch64-apple-ios
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: x86_64-apple-ios
 
-  # Add macOS-latest to the matrix when rust_sodium has been removed.
+      # Cache.
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Install cargo-lipo to generate universal libs.
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-lipo
+      # Build prod universal library.
+      - name: Build universal lib - Prod
+        shell: bash
+        run: cargo lipo --release --manifest-path=safe-ffi/Cargo.toml
+      # Upload prod universal library.
+      - uses: actions/upload-artifact@master
+        with:
+          name: safe-ffi-apple-ios-prod
+          path: target/universal/release/libsafe_ffi.a
+      # Build dev universal library.
+      - name: Build universal lib - Dev
+        shell: bash
+        run: cargo lipo --release --manifest-path=safe-ffi/Cargo.toml --features=mock-network
+      # Upload dev universal library.
+      - uses: actions/upload-artifact@master
+        with:
+          name: safe-ffi-apple-ios-dev
+          path: target/universal/release/libsafe_ffi.a
+
   test-component:
     name: Test Component
     runs-on: ${{ matrix.os }}
@@ -176,5 +220,23 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+      # Cache.
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run tests.
       - shell: bash
         run: ./resources/test-scripts/${{ matrix.component }}
