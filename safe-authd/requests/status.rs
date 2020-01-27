@@ -47,7 +47,7 @@ pub fn process_req(
             logged_in,
             num_auth_reqs,
             num_notif_subs,
-            authd_version,
+            authd_version: Some(authd_version),
         };
 
         println!("Status report sent: {:?}", status_report);
