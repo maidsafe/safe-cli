@@ -394,7 +394,6 @@ impl SafeApp for SafeAppScl {
         let append_only_data_address = ADataAddress::PubSeq { name, tag };
 
         debug!("Address for a_data : {:?}", append_only_data_address);
-
         let data_length = self
             .get_current_seq_append_only_data_version(name, tag)
             .map_err(|e| {
