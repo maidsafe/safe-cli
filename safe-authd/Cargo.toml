@@ -50,3 +50,7 @@ unwrap = "~1.2.1"
 version = "1"
 default-features = false # Disable features which are enabled by default
 features = ["precommit-hook","user-hooks"]
+
+
+[patch.crates-io]
+self_update = { git = "https://github.com/joshuef/self-update.git", rev = "9a15014c31096b8f35da2e439aaf1b560deb0a16" }
