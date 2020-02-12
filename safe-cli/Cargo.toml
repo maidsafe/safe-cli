@@ -1,6 +1,6 @@
 [package]
 name = "safe-cli"
-version = "0.8.1"
+version = "0.8.0"
 description = "SAFE CLI"
 authors = ["bochaco <gabrielviganotti@gmail.com>", "Josh Wilson <joshuef@gmail.com>", "Calum Craig <calum.craig@maidsafe.net>", "Chris O'Neil <chris.oneil@gmail.com>"]
 publish = false
@@ -25,7 +25,7 @@ relative-path = "0.4.0"
 reqwest = "0.9.22"
 rpassword = "~4.0.5"
 safe-api = { path = "../safe-api" }
-self_update = "^0.9.0"
+self_update = "^0.12.0"
 serde = "1.0.91"
 serde_json = "1.0.39"
 serde_yaml = "0.8.11"
@@ -50,6 +50,3 @@ unwrap = "~1.2.1"
 version = "1"
 default-features = false # Disable features which are enabled by default
 features = ["precommit-hook","user-hooks"]
-
-[patch.crates-io]
-self_update = { git = "https://github.com/joshuef/self-update.git", rev = "9a15014c31096b8f35da2e439aaf1b560deb0a16" }
