@@ -8,9 +8,12 @@
 // Software.
 
 use futures::Future;
+use futures::future::Future
 use log::{debug, error, info};
 use std::fs;
 use std::net::ToSocketAddrs;
+use std::net::{SocketAddr, SocketAddrV6, Ipv6Addr};
+
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
@@ -54,7 +57,7 @@ pub fn quic_send(
     };
 
     let mut client_config = quinn::ClientConfigBuilder::new(client_config);
-    client_config.protocols(&[quinn::ALPN_QUIC_HTTP]);
+    // client_config.protocols(&[quinn::ALPN_QUIC_HTTP]);
 
     if keylog {
         client_config.enable_keylog();
@@ -101,8 +104,13 @@ pub fn quic_send(
     let mut endpoint = quinn::Endpoint::builder();
     endpoint.default_client_config(client_config.build());
 
+    let socket = SocketAddr::V6( SocketAddrV6::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1), 8080, 0,0 ) );
+// IpAddr::V6(Ipv6Addr::from_str("[::]:0"))
+    // let localhost = ;
+    // Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
+
     let (endpoint_driver, endpoint, _) = endpoint
-        .bind("[::]:0")
+        .bind(&socket)
         .map_err(|err| format!("Failed to bind client endpoint: {}", err))?;
     let mut runtime = Runtime::new()
         .map_err(|err| format!("Unexpected error setting up client endpoint: {}", err))?;
