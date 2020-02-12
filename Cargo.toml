@@ -3,4 +3,5 @@ members = ["safe-cli", "safe-api", "safe-ffi", "safe-authd", "jsonrpc-quic"]
 
 
 [patch.crates-io]
-self_update = { git = "https://github.com/joshuef/self_update.git", rev = "9a15014c31096b8f35da2e439aaf1b560deb0a16" }
+self_update = { git = "https://github.com/joshuef/self_update", rev = "9a15014c31096b8f35da2e439aaf1b560deb0a16" }
+quic-p2p = { git="https://github.com/maidsafe/quic-p2p.git", rev="f1991746a82ef21ac69b26e17ba8c6a6b4c15653"}
