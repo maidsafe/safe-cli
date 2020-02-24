@@ -151,7 +151,7 @@ pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<Saf
             }),
             SafeDataType::PublishedImmutableData => {
                 let data = if retrieve_data {
-                    safe.files_get_published_immutable(&url)?
+                    safe.files_get_published_immutable(&url, None, None)?
                 } else {
                     vec![]
                 };
@@ -179,7 +179,7 @@ pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<Saf
                 };
 
                 let data = if retrieve_data {
-                    safe.files_get_published_immutable(&url)?
+                    safe.files_get_published_immutable(&url, None, None)?
                 } else {
                     vec![]
                 };

@@ -255,7 +255,12 @@ impl SafeApp for SafeAppScl {
         Ok(*idata.name())
     }
 
-    fn files_get_published_immutable(&self, xorname: XorName) -> Result<Vec<u8>> {
+    fn files_get_published_immutable(
+        &self,
+        xorname: XorName,
+        position: Option<u64>,
+        length: Option<u64>,
+    ) -> Result<Vec<u8>> {
         debug!("Fetching immutable data: {:?}", &xorname);
 
         let safe_app: &App = self.get_safe_app()?;
@@ -264,9 +269,9 @@ impl SafeApp for SafeAppScl {
             immutable_data::get_value(
                 client,
                 immd_data_addr,
+                position,
+                length,
                 /*decryption_key:*/ None,
-                None,
-                None,
             )
             .map_err(SafeAppError)
         })

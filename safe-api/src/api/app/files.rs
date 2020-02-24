@@ -565,11 +565,16 @@ impl Safe {
     /// let received_data = safe.files_get_published_immutable(&xorurl).unwrap();
     /// # assert_eq!(received_data, data);
     /// ```
-    pub fn files_get_published_immutable(&self, url: &str) -> Result<Vec<u8>> {
+    pub fn files_get_published_immutable(
+        &self,
+        url: &str,
+        position: Option<u64>,
+        length: Option<u64>,
+    ) -> Result<Vec<u8>> {
         // TODO: do we want ownership from other PKs yet?
         let (xorurl_encoder, _) = self.parse_and_resolve_url(url)?;
         self.safe_app
-            .files_get_published_immutable(xorurl_encoder.xorname())
+            .files_get_published_immutable(xorurl_encoder.xorname(), position, length)
     }
 }
 

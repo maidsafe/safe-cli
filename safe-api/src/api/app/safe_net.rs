@@ -50,7 +50,12 @@ pub trait SafeApp {
 
     fn files_put_published_immutable(&mut self, data: &[u8], dry_run: bool) -> Result<XorName>;
 
-    fn files_get_published_immutable(&self, xorname: XorName) -> Result<Vec<u8>>;
+    fn files_get_published_immutable(
+        &self,
+        xorname: XorName,
+        position: Option<u64>,
+        length: Option<u64>,
+    ) -> Result<Vec<u8>>;
 
     fn put_seq_append_only_data(
         &mut self,
