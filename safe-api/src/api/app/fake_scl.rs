@@ -252,8 +252,8 @@ impl SafeApp for SafeAppFake {
     fn files_get_published_immutable(
         &self,
         xorname: XorName,
-        position: Option<u64>,
-        length: Option<u64>,
+        _position: Option<u64>,
+        _length: Option<u64>,
     ) -> Result<Vec<u8>> {
         let data = match self
             .fake_vault
