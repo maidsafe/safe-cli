@@ -19,6 +19,12 @@ use safe_api::Safe;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
 
+/// Read entire contents of a file.
+pub static FILE_READ_TO_END: u64 = 0;
+
+/// Read from the start
+pub static FILE_READ_FROM_START: u64 = 0;
+
 #[no_mangle]
 pub unsafe extern "C" fn files_container_create(
     app: *mut Safe,
@@ -218,6 +224,8 @@ pub unsafe extern "C" fn files_put_published_immutable(
 pub unsafe extern "C" fn files_get_published_immutable(
     app: *mut Safe,
     url: *const c_char,
+    position: u64,
+    length: u64,
     user_data: *mut c_void,
     o_cb: extern "C" fn(
         user_data: *mut c_void,
@@ -229,7 +237,19 @@ pub unsafe extern "C" fn files_get_published_immutable(
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
         let user_data = OpaqueCtx(user_data);
         let url_str = String::clone_from_repr_c(url)?;
-        let data = (*app).files_get_published_immutable(&url_str)?;
+        let pos = if position == FILE_READ_FROM_START {
+            None
+        } else {
+            Some(position)
+        };
+
+        let len = if length == FILE_READ_TO_END {
+            None
+        } else {
+            Some(length)
+        };
+
+        let data = (*app).files_get_published_immutable(&url_str, pos, len)?;
         o_cb(user_data.0, FFI_RESULT_OK, data.as_ptr(), data.len());
         Ok(())
     })

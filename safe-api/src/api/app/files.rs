@@ -512,7 +512,7 @@ impl Safe {
     /// # safe.connect("", Some("fake-credentials")).unwrap();
     /// let data = b"Something super good";
     /// let xorurl = safe.files_put_published_immutable(data, Some("text/plain"), false).unwrap();
-    /// # let received_data = safe.files_get_published_immutable(&xorurl).unwrap();
+    /// # let received_data = safe.files_get_published_immutable(&xorurl, None, None).unwrap();
     /// # assert_eq!(received_data, data);
     /// ```
     pub fn files_put_published_immutable(
@@ -562,7 +562,7 @@ impl Safe {
     /// # safe.connect("", Some("fake-credentials")).unwrap();
     /// # let data = b"Something super good";
     /// let xorurl = safe.files_put_published_immutable(data, None, false).unwrap();
-    /// let received_data = safe.files_get_published_immutable(&xorurl).unwrap();
+    /// let received_data = safe.files_get_published_immutable(&xorurl, None, None).unwrap();
     /// # assert_eq!(received_data, data);
     /// ```
     pub fn files_get_published_immutable(

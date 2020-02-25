@@ -678,7 +678,7 @@ mod tests {
             .unwrap();
         let data = safe
             .safe_app
-            .files_get_published_immutable(xorname)
+            .files_get_published_immutable(xorname, None, None)
             .unwrap();
         let text = std::str::from_utf8(data.as_slice()).unwrap();
         assert_eq!(text.to_string(), "HELLLOOOOOOO");
