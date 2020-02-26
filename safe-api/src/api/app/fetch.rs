@@ -78,7 +78,7 @@ impl Safe {
     /// # unwrap!(safe.connect("", Some("fake-credentials")));
     /// let (xorurl, _, _) = unwrap!(safe.files_container_create("../testdata/", None, true, false));
     ///
-    /// let safe_data = unwrap!( safe.fetch( &format!( "{}/test.md", &xorurl.replace("?v=0", "") ) ) );
+    /// let safe_data = unwrap!( safe.fetch( &format!( "{}/test.md", &xorurl.replace("?v=0", "") ), None ) );
     /// let data_string = match safe_data {
     ///     SafeData::PublishedImmutableData { data, .. } => {
     ///         match String::from_utf8(data) {
