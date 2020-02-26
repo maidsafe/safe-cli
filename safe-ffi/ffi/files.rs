@@ -8,6 +8,7 @@
 // Software.
 
 use super::{
+    constants::{FILE_READ_FROM_START, FILE_READ_TO_END},
     errors::Result,
     ffi_structs::{processed_files_into_repr_c, ProcessedFiles},
     helpers::from_c_str_to_str_option,
@@ -18,12 +19,6 @@ use ffi_utils::{
 use safe_api::Safe;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
-
-/// Read entire contents of a file.
-pub static FILE_READ_TO_END: u64 = 0;
-
-/// Read from the start
-pub static FILE_READ_FROM_START: u64 = 0;
 
 #[no_mangle]
 pub unsafe extern "C" fn files_container_create(
@@ -224,7 +219,7 @@ pub unsafe extern "C" fn files_put_published_immutable(
 pub unsafe extern "C" fn files_get_published_immutable(
     app: *mut Safe,
     url: *const c_char,
-    position: u64,
+    index: u64,
     length: u64,
     user_data: *mut c_void,
     o_cb: extern "C" fn(
@@ -237,10 +232,10 @@ pub unsafe extern "C" fn files_get_published_immutable(
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
         let user_data = OpaqueCtx(user_data);
         let url_str = String::clone_from_repr_c(url)?;
-        let pos = if position == FILE_READ_FROM_START {
+        let pos = if index == FILE_READ_FROM_START {
             None
         } else {
-            Some(position)
+            Some(index)
         };
 
         let len = if length == FILE_READ_TO_END {
@@ -249,7 +244,7 @@ pub unsafe extern "C" fn files_get_published_immutable(
             Some(length)
         };
 
-        let data = (*app).files_get_published_immutable(&url_str, pos, len)?;
+        let data = (*app).files_get_published_immutable(&url_str, Some((pos, len)))?;
         o_cb(user_data.0, FFI_RESULT_OK, data.as_ptr(), data.len());
         Ok(())
     })

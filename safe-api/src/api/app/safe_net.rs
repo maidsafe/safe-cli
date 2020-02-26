@@ -8,6 +8,7 @@
 // Software.
 
 use crate::Result;
+use crate::api::fetch::Range;
 use safe_nd::{Coins, MDataSeqValue, SeqMutableData, Transaction, TransactionId, XorName};
 use std::collections::BTreeMap;
 use threshold_crypto::{PublicKey, SecretKey};
@@ -50,12 +51,7 @@ pub trait SafeApp {
 
     fn files_put_published_immutable(&mut self, data: &[u8], dry_run: bool) -> Result<XorName>;
 
-    fn files_get_published_immutable(
-        &self,
-        xorname: XorName,
-        position: Option<u64>,
-        length: Option<u64>,
-    ) -> Result<Vec<u8>>;
+    fn files_get_published_immutable(&self, xorname: XorName, range: Range) -> Result<Vec<u8>>;
 
     fn put_seq_append_only_data(
         &mut self,

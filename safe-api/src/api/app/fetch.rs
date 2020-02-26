@@ -18,6 +18,8 @@ use crate::{Error, Result};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 
+pub type Range = Option<(Option<u64>, Option<u64>)>;
+
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 pub struct NrsMapContainerInfo {
     pub public_name: String,
@@ -92,8 +94,8 @@ impl Safe {
     ///
     /// assert!(data_string.starts_with("hello tests!"));
     /// ```
-    pub fn fetch(&self, url: &str) -> Result<SafeData> {
-        fetch_from_url(self, url, true)
+    pub fn fetch(&self, url: &str, range: Range) -> Result<SafeData> {
+        fetch_from_url(self, url, true, range)
     }
 
     /// # Inspect a safe:// URL and retrieve metadata information but the actual target content
@@ -130,11 +132,16 @@ impl Safe {
     /// assert!(data_string.starts_with("hello tests!"));
     /// ```
     pub fn inspect(&self, url: &str) -> Result<SafeData> {
-        fetch_from_url(self, url, false)
+        fetch_from_url(self, url, false, None)
     }
 }
 
-pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<SafeData> {
+pub fn fetch_from_url(
+    safe: &Safe,
+    url: &str,
+    retrieve_data: bool,
+    range: Range,
+) -> Result<SafeData> {
     let mut the_xor = Safe::parse_url(url)?;
     let xorurl = the_xor.to_string()?;
     info!("URL parsed successfully, fetching: {:?}", xorurl);
@@ -151,7 +158,7 @@ pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<Saf
             }),
             SafeDataType::PublishedImmutableData => {
                 let data = if retrieve_data {
-                    safe.files_get_published_immutable(&url, None, None)?
+                    safe.files_get_published_immutable(&url, range)?
                 } else {
                     vec![]
                 };
@@ -179,7 +186,7 @@ pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<Saf
                 };
 
                 let data = if retrieve_data {
-                    safe.files_get_published_immutable(&url, None, None)?
+                    safe.files_get_published_immutable(&url, range)?
                 } else {
                     vec![]
                 };
@@ -232,7 +239,7 @@ pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<Saf
                         let new_target_xorurl = file_item.get("link")
                             .ok_or_else(|| Error::ContentError(format!("FileItem is corrupt. It is missing a \"link\" property at path, \"{}\" on the FilesContainer at: {} ", path, xorurl)))?;
 
-                        safe.fetch(new_target_xorurl)
+                        safe.fetch(new_target_xorurl, None)
                     }
                     None => Err(Error::ContentError(format!(
                         "No content found matching the \"{}\" path on the FilesContainer at: {} ",
@@ -276,7 +283,7 @@ pub fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool) -> Result<Saf
             debug!("Resolving target from resolvable map: {}", url_with_path);
 
             let (_, public_name, _, _) = get_subnames_host_path_and_version(url)?;
-            let content = safe.fetch(&url_with_path)?;
+            let content = safe.fetch(&url_with_path, None)?;
             the_xor.set_path(""); // we don't want the path, just the NRS Map xorurl and version
             let nrs_map_container = NrsMapContainerInfo {
                 public_name,
@@ -371,7 +378,7 @@ mod tests {
         let (xorurl, _key_pair) = unwrap!(safe.keys_create_preload_test_coins(preload_amount));
 
         let xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&xorurl));
-        let content = unwrap!(safe.fetch(&xorurl));
+        let content = unwrap!(safe.fetch(&xorurl, None));
         assert!(
             content
                 == SafeData::SafeKey {
@@ -393,7 +400,7 @@ mod tests {
         let xorurl = unwrap!(safe.wallet_create());
 
         let xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&xorurl));
-        let content = unwrap!(safe.fetch(&xorurl));
+        let content = unwrap!(safe.fetch(&xorurl, None));
         assert!(
             content
                 == SafeData::Wallet {
@@ -421,7 +428,7 @@ mod tests {
             unwrap!(safe.files_container_create("../testdata/", None, true, false));
 
         let xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&xorurl));
-        let content = unwrap!(safe.fetch(&xorurl));
+        let content = unwrap!(safe.fetch(&xorurl, None));
 
         assert!(
             content
@@ -475,7 +482,7 @@ mod tests {
         ));
 
         let nrs_url = format!("safe://{}", site_name);
-        let content = unwrap!(safe.fetch(&nrs_url));
+        let content = unwrap!(safe.fetch(&nrs_url, None));
 
         // this should resolve to a FilesContainer until we enable prevent resolution.
         match &content {
@@ -525,7 +532,7 @@ mod tests {
 
         let nrs_xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&nrs_map_xorurl));
         let nrs_url = format!("safe://{}", site_name);
-        let content = unwrap!(safe.fetch(&nrs_url));
+        let content = unwrap!(safe.fetch(&nrs_url, None));
 
         // this should resolve to a FilesContainer until we enable prevent resolution.
         match &content {
@@ -562,7 +569,7 @@ mod tests {
             .unwrap();
 
         let xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&xorurl));
-        let content = unwrap!(safe.fetch(&xorurl));
+        let content = unwrap!(safe.fetch(&xorurl, None));
         assert!(
             content
                 == SafeData::PublishedImmutableData {
@@ -604,7 +611,7 @@ mod tests {
             None,
             XorUrlBase::Base32z
         ));
-        match safe.fetch(&xorurl) {
+        match safe.fetch(&xorurl, None) {
             Ok(c) => panic!(format!("Unxpected fetched content: {:?}", c)),
             Err(msg) => assert_eq!(
                 msg,
@@ -640,7 +647,7 @@ mod tests {
             None,
             XorUrlBase::Base32z
         ));
-        match safe.fetch(&xorurl) {
+        match safe.fetch(&xorurl, None) {
             Ok(c) => panic!(format!("Unxpected fetched content: {:?}", c)),
             Err(msg) => assert_eq!(
                 msg,
