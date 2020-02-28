@@ -25,9 +25,9 @@ function download_and_run_safe_vault() {
     vault_bin_name="safe_vault"
     case $uname_output in
         Linux*)
-            curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.20.1/safe_vault-0.20.1-x86_64-unknown-linux-musl.tar.gz
-            tar xvf safe_vault-0.20.1-x86_64-unknown-linux-musl.tar.gz
-            rm safe_vault-0.20.1-x86_64-unknown-linux-musl.tar.gz
+            curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.20.1/safe_vault-0.20.1-unknown-linux-musl.tar.gz
+            tar xvf a_safe_vault-0.0.1-1-x86_64-unknown-linux-musl.tar.xz
+            rm a_safe_vault-0.0.1-1-x86_64-unknown-linux-musl.tar.xz
             ;;
         Darwin*)
             curl -L -O https://github.com/maidsafe/safe_vault/releases/download/0.20.1/safe_vault-0.20.1-x86_64-apple-darwin.tar.gz
@@ -45,8 +45,11 @@ function download_and_run_safe_vault() {
             exit 1
     esac
 
+    cd $cwd
+
     echo "Launching local safe_vault..."
-    ./$vault_bin_name &
+    cd safe-cli
+    cargo run -- vault run-baby-fleming
 
     cd $cwd
 }
