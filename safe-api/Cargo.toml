@@ -38,7 +38,6 @@ walkdir = "~2.0.1" #ffi utils needs this version
 [features]
 mock-network = ["safe_app/mock-network", "safe_authenticator/mock-network"]
 fake-auth = ["safe_app/testing"]
-scl-mock = ["fake-auth"]
 authenticator = []
 authd_client = []
 app = []

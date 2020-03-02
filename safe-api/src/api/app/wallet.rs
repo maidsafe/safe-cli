@@ -1132,7 +1132,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "scl-mock"))]
     fn test_wallet_transfer_from_not_owned_wallet() {
         use unwrap::unwrap;
         let mut safe = Safe::default();

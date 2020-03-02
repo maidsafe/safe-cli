@@ -9,21 +9,15 @@
 
 mod auth;
 mod consts;
-#[cfg(feature = "scl-mock")]
-mod fake_scl;
 mod helpers;
 mod keys;
 mod nrs;
-#[cfg(not(feature = "scl-mock"))]
 mod safe_client_libs;
 mod safe_net;
 mod xorurl_media_types;
 
 use super::common;
 use super::constants;
-#[cfg(feature = "scl-mock")]
-use fake_scl::SafeAppFake as SafeAppImpl;
-#[cfg(not(feature = "scl-mock"))]
 use safe_client_libs::SafeAppScl as SafeAppImpl;
 use safe_net::SafeApp;
 use xorurl::XorUrlBase;

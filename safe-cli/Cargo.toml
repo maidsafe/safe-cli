@@ -35,7 +35,6 @@ pretty-hex = "0.1.1"
 [features]
 mock-network = ["safe-api/mock-network"]
 fake-auth = ["safe-api/fake-auth"]
-scl-mock = ["safe-api/scl-mock"]
 
 [dependencies.safe-api]
 path = "../safe-api"
