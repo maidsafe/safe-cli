@@ -262,12 +262,12 @@ impl SafeApp for SafeAppScl {
         let safe_app: &App = self.get_safe_app()?;
         let immd_data_addr = IDataAddress::Pub(xorname);
         let data = run(safe_app, move |client, _app_context| {
-            if range.is_some() {
+            if let Some((start, end)) = range {
                 immutable_data::get_value(
                     client,
                     immd_data_addr,
-                    range.unwrap_or_default().0,
-                    range.unwrap_or_default().1,
+                    start,
+                    end,
                     /*decryption_key:*/ None,
                 )
                 .map_err(SafeAppError)

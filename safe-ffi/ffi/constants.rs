@@ -8,7 +8,7 @@
 // Software.
 
 /// Read entire contents of a file.
-pub static FILE_READ_TO_END: u64 = 0;
+pub const FILE_READ_TO_END: u64 = 0;
 
 /// Read from the start
-pub static FILE_READ_FROM_START: u64 = 0;
+pub const FILE_READ_FROM_START: u64 = 0;

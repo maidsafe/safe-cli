@@ -136,12 +136,7 @@ impl Safe {
     }
 }
 
-pub fn fetch_from_url(
-    safe: &Safe,
-    url: &str,
-    retrieve_data: bool,
-    range: Range,
-) -> Result<SafeData> {
+fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool, range: Range) -> Result<SafeData> {
     let mut the_xor = Safe::parse_url(url)?;
     let xorurl = the_xor.to_string()?;
     info!("URL parsed successfully, fetching: {:?}", xorurl);
