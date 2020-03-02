@@ -250,7 +250,7 @@ impl SafeApp for SafeAppFake {
         Ok(xorname)
     }
 
-    fn files_get_published_immutable(&self, xorname: XorName, _range: Range) -> Result<Vec<u8>> {
+    fn files_get_published_immutable(&self, xorname: XorName, range: Range) -> Result<Vec<u8>> {
         let data = match self
             .fake_vault
             .published_immutable_data
@@ -262,6 +262,13 @@ impl SafeApp for SafeAppFake {
                     "No ImmutableData found at this address".to_string(),
                 ))
             }
+        };
+
+        let data = match range {
+            Some((start, end)) => data[start.unwrap_or_default() as usize
+                ..(start.unwrap_or_default() + end.unwrap_or(data.len() as u64)) as usize]
+                .to_vec(),
+            None => data.to_vec(),
         };
 
         Ok(data)
