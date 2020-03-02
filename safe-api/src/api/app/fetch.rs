@@ -591,6 +591,39 @@ mod tests {
     }
 
     #[test]
+    fn test_fetch_range_published_immutable_data() {
+        let mut safe = Safe::default();
+        unwrap!(safe.connect("", Some("fake-credentials")));
+        let saved_data = b"Something super immutable";
+        let size = saved_data.len();
+        let xorurl = safe
+            .files_put_published_immutable(saved_data, Some("text/plain"), false)
+            .unwrap();
+
+        // Fetch first half and match
+        let fetch_first_half = Some((None, Some(size as u64 / 2)));
+        let content = unwrap!(safe.fetch(&xorurl, fetch_first_half));
+
+        match &content {
+            SafeData::PublishedImmutableData { data, .. } => {
+                assert_eq!(data.clone(), saved_data[0..size / 2].to_vec());
+            }
+            _ => panic!("unable to fetch published immutable data was not returned."),
+        }
+
+        // Fetch second half and match
+        let fetch_second_half = Some((Some(size as u64 / 2), Some((size - (size / 2)) as u64)));
+        let content = unwrap!(safe.fetch(&xorurl, fetch_second_half));
+
+        match &content {
+            SafeData::PublishedImmutableData { data, .. } => {
+                assert_eq!(data.clone(), saved_data[size / 2..size].to_vec());
+            }
+            _ => panic!("unable to fetch published immutable data was not returned."),
+        }
+    }
+
+    #[test]
     fn test_fetch_unsupported() {
         let mut safe = Safe::default();
         unwrap!(safe.connect("", Some("fake-credentials")));
