@@ -1257,12 +1257,12 @@ mod tests {
         assert_eq!(files_map.len(), 2);
         let file_item1 = &files_map["/testdata/test.md"];
         assert_eq!(file_item1[FAKE_RDF_PREDICATE_LINK], "safe://top_xorurl");
-        assert_eq!(file_item1[FAKE_RDF_PREDICATE_TYPE], "text/x-markdown");
+        assert_eq!(file_item1[FAKE_RDF_PREDICATE_TYPE], "text/markdown");
         assert_eq!(file_item1[FAKE_RDF_PREDICATE_SIZE], "12");
 
         let file_item2 = &files_map["/testdata/subfolder/subexists.md"];
         assert_eq!(file_item2[FAKE_RDF_PREDICATE_LINK], "safe://second_xorurl");
-        assert_eq!(file_item2[FAKE_RDF_PREDICATE_TYPE], "text/x-markdown");
+        assert_eq!(file_item2[FAKE_RDF_PREDICATE_TYPE], "text/markdown");
         assert_eq!(file_item2[FAKE_RDF_PREDICATE_SIZE], "23");
     }
 
