@@ -232,19 +232,19 @@ pub unsafe extern "C" fn files_get_published_immutable(
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
         let user_data = OpaqueCtx(user_data);
         let url_str = String::clone_from_repr_c(url)?;
-        let pos = if start == FILE_READ_FROM_START {
+        let start = if start == FILE_READ_FROM_START {
             None
         } else {
             Some(start)
         };
 
-        let len = if end == FILE_READ_TO_END {
+        let end = if end == FILE_READ_TO_END {
             None
         } else {
             Some(end)
         };
 
-        let data = (*app).files_get_published_immutable(&url_str, Some((pos, len)))?;
+        let data = (*app).files_get_published_immutable(&url_str, Some((start, end)))?;
         o_cb(user_data.0, FFI_RESULT_OK, data.as_ptr(), data.len());
         Ok(())
     })
