@@ -26,8 +26,8 @@ pub unsafe extern "C" fn fetch(
     app: *mut Safe,
     url: *const c_char,
     user_data: *mut c_void,
-    index: u64,
-    length: u64,
+    start: u64,
+    end: u64,
     o_published: extern "C" fn(user_data: *mut c_void, data: *const PublishedImmutableData),
     o_wallet: extern "C" fn(user_data: *mut c_void, data: *const Wallet),
     o_keys: extern "C" fn(user_data: *mut c_void, data: *const SafeKey),
@@ -36,16 +36,16 @@ pub unsafe extern "C" fn fetch(
 ) {
     catch_unwind_cb(user_data, o_err, || -> Result<()> {
         let url = String::clone_from_repr_c(url)?;
-        let pos = if index == FILE_READ_FROM_START {
+        let pos = if start == FILE_READ_FROM_START {
             None
         } else {
-            Some(index)
+            Some(start)
         };
 
-        let len = if length == FILE_READ_TO_END {
+        let len = if end == FILE_READ_TO_END {
             None
         } else {
-            Some(length)
+            Some(end)
         };
         let content = (*app).fetch(&url, Some((pos, len)));
         invoke_callback(

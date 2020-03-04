@@ -219,8 +219,8 @@ pub unsafe extern "C" fn files_put_published_immutable(
 pub unsafe extern "C" fn files_get_published_immutable(
     app: *mut Safe,
     url: *const c_char,
-    index: u64,
-    length: u64,
+    start: u64,
+    end: u64,
     user_data: *mut c_void,
     o_cb: extern "C" fn(
         user_data: *mut c_void,
@@ -232,16 +232,16 @@ pub unsafe extern "C" fn files_get_published_immutable(
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
         let user_data = OpaqueCtx(user_data);
         let url_str = String::clone_from_repr_c(url)?;
-        let pos = if index == FILE_READ_FROM_START {
+        let pos = if start == FILE_READ_FROM_START {
             None
         } else {
-            Some(index)
+            Some(start)
         };
 
-        let len = if length == FILE_READ_TO_END {
+        let len = if end == FILE_READ_TO_END {
             None
         } else {
-            Some(length)
+            Some(end)
         };
 
         let data = (*app).files_get_published_immutable(&url_str, Some((pos, len)))?;

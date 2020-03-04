@@ -265,8 +265,8 @@ impl SafeApp for SafeAppFake {
         };
 
         let data = match range {
-            Some((start, end)) => data[start.unwrap_or_default() as usize
-                ..(start.unwrap_or_default() + end.unwrap_or(data.len() as u64)) as usize]
+            Some((start, end)) => data
+                [start.unwrap_or_default() as usize..end.unwrap_or(data.len() as u64) as usize]
                 .to_vec(),
             None => data.to_vec(),
         };

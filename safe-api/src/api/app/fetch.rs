@@ -234,7 +234,7 @@ fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool, range: Range) -> 
                         let new_target_xorurl = file_item.get("link")
                             .ok_or_else(|| Error::ContentError(format!("FileItem is corrupt. It is missing a \"link\" property at path, \"{}\" on the FilesContainer at: {} ", path, xorurl)))?;
 
-                        safe.fetch(new_target_xorurl, None)
+                        safe.fetch(new_target_xorurl, range)
                     }
                     None => Err(Error::ContentError(format!(
                         "No content found matching the \"{}\" path on the FilesContainer at: {} ",
@@ -278,7 +278,7 @@ fn fetch_from_url(safe: &Safe, url: &str, retrieve_data: bool, range: Range) -> 
             debug!("Resolving target from resolvable map: {}", url_with_path);
 
             let (_, public_name, _, _) = get_subnames_host_path_and_version(url)?;
-            let content = safe.fetch(&url_with_path, None)?;
+            let content = safe.fetch(&url_with_path, range)?;
             the_xor.set_path(""); // we don't want the path, just the NRS Map xorurl and version
             let nrs_map_container = NrsMapContainerInfo {
                 public_name,
@@ -363,6 +363,8 @@ mod tests {
     use crate::api::xorurl::XorUrlEncoder;
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
+    use std::fs::File;
+    use std::io::Read;
     use unwrap::unwrap;
 
     #[test]
@@ -612,12 +614,70 @@ mod tests {
         }
 
         // Fetch second half and match
-        let fetch_second_half = Some((Some(size as u64 / 2), Some((size - (size / 2)) as u64)));
+        let fetch_second_half = Some((Some(size as u64 / 2), Some(size as u64)));
         let content = unwrap!(safe.fetch(&xorurl, fetch_second_half));
 
         match &content {
             SafeData::PublishedImmutableData { data, .. } => {
                 assert_eq!(data.clone(), saved_data[size / 2..size].to_vec());
+            }
+            _ => panic!("unable to fetch published immutable data was not returned."),
+        }
+    }
+
+    #[test]
+    fn test_fetch_range_from_files_container() {
+        let mut safe = Safe::default();
+        let site_name: String = thread_rng().sample_iter(&Alphanumeric).take(15).collect();
+        unwrap!(safe.connect("", Some("fake-credentials")));
+
+        let (xorurl, _, _files_map) =
+            unwrap!(safe.files_container_create("../testdata/", None, true, false));
+
+        let mut xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&xorurl));
+        xorurl_encoder.set_content_version(Some(0));
+        let (_nrs_map_xorurl, _, _nrs_map) = unwrap!(safe.nrs_map_container_create(
+            &site_name,
+            &unwrap!(xorurl_encoder.to_string()),
+            true,
+            true,
+            false
+        ));
+
+        let nrs_url = format!("safe://{}/test.md", site_name);
+
+        let mut file = File::open("../testdata/test.md").unwrap();
+        let mut file_data = Vec::new();
+        file.read_to_end(&mut file_data).unwrap();
+        let file_size = file_data.len();
+
+        // Fetch full file and match
+        let content = unwrap!(safe.fetch(&nrs_url, None));
+        match &content {
+            SafeData::PublishedImmutableData { data, .. } => {
+                assert_eq!(data.clone(), file_data.clone());
+            }
+            _ => panic!("unable to fetch published immutable data was not returned."),
+        }
+
+        // Fetch first half and match
+        let fetch_first_half = Some((None, Some(file_size as u64 / 2)));
+        let content = unwrap!(safe.fetch(&nrs_url, fetch_first_half));
+
+        match &content {
+            SafeData::PublishedImmutableData { data, .. } => {
+                assert_eq!(data.clone(), file_data[0..file_size / 2].to_vec());
+            }
+            _ => panic!("unable to fetch published immutable data was not returned."),
+        }
+
+        // Fetch second half and match
+        let fetch_second_half = Some((Some(file_size as u64 / 2), Some(file_size as u64)));
+        let content = unwrap!(safe.fetch(&nrs_url, fetch_second_half));
+
+        match &content {
+            SafeData::PublishedImmutableData { data, .. } => {
+                assert_eq!(data.clone(), file_data[file_size / 2..file_size].to_vec());
             }
             _ => panic!("unable to fetch published immutable data was not returned."),
         }
