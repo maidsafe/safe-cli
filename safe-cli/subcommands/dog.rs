@@ -22,7 +22,7 @@ pub struct DogCommands {
     location: Option<String>,
 }
 
-pub fn dog_commander(
+pub async fn dog_commander(
     cmd: DogCommands,
     output_fmt: OutputFmt,
     safe: &mut Safe,
@@ -30,7 +30,7 @@ pub fn dog_commander(
     let url = get_from_arg_or_stdin(cmd.location, None)?;
     debug!("Running dog for: {:?}", &url);
 
-    let content = safe.fetch(&url, None)?;
+    let content = safe.inspect(&url).await?;
     match &content {
         SafeData::FilesContainer {
             xorurl,
