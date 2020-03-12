@@ -14,7 +14,7 @@ jobs:
     name: Rustfmt-Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -59,7 +59,7 @@ jobs:
         target: [armv7-linux-androideabi, x86_64-linux-android]
         component: [safe-ffi]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -151,7 +151,7 @@ jobs:
       PKG_CONFIG_ALLOW_CROSS: 1
       DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -214,7 +214,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         component: [api-tests, cli-tests, e2e-authd-mock-tests, e2e-authd-vault-tests]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
