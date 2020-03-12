@@ -5,6 +5,7 @@ set -e -x
 
 [[ -z $SAFE_AUTHD_PATH ]] && export SAFE_AUTHD_PATH=~/.safe/authd
 [[ -z $SAFE_VAULT_PATH ]] && export SAFE_VAULT_PATH=~/.safe/vault
+[[ -z $SAFE_CLI_PATH ]] && export SAFE_CLI_PATH=~/.safe/safe-cli
 
 
 if [ -n "$1" ]; then
@@ -17,12 +18,15 @@ echo "Installing SAFE Vault $vault_version"
 
 uname_output=$(uname -a)
 authd_bin_name="safe-authd"
+cli_bin_name="safe"
 case $uname_output in
     MSYS_NT*)   # Windows in Jenkins
         authd_bin_name="safe-authd.exe"
+        cli_bin_name="safe.exe"
         ;;
     MINGW*)     # Windows in GH Actions
         authd_bin_name="safe-authd.exe"
+        cli_bin_name="safe.exe"
         ;;
 esac
 
@@ -73,6 +77,15 @@ function run_safe_vault() {
     cd $cwd
 }
 
+function build_and_place_cli() {
+    cd safe-cli
+    cargo build --release
+    rm -rf $SAFE_CLI_PATH
+    mkdir $SAFE_CLI_PATH
+    mv ../target/release/$cli_bin_name $SAFE_CLI_PATH
+    pwd
+    cd -
+}
 
 function build_safe_authd() {
     cd safe-authd

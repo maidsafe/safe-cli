@@ -10,6 +10,20 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
+  e2e:
+    name: E2E against real baby
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          # components: rustfmt, clippy
+      run: ./resources/test-scripts/run-baby-and-authd
+      run: cargo bench
+
   clippy:
     name: Rustfmt-Clippy
     runs-on: ubuntu-latest

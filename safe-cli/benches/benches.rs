@@ -17,6 +17,7 @@ const TEST_FILE: &str = "../testdata/test.md";
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 pub fn calling_safe_cat() -> () {
+    // trace!("bionnnnnnnnn{}", get_bin_location());
     let content = cmd!(get_bin_location(), "files", "put", TEST_FILE, "--json")
         .read()
         .unwrap();

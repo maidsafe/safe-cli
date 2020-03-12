@@ -7,16 +7,37 @@ source ./resources/test-scripts/install-vault-and-authd
 
 safe_vault_version=$1
 
+# [[ -z $SAFE_CLI_BUILD ]] && export SAFE_CLI_BUILD=~
+
+safe -V
+
 function download_and_run_safe_baby_fleming() {
     # First arg is safe vault desired
     # download_safe_vault $safe_vault_version
+   
+   # Setup the cli
+   build_and_place_cli
+   echo "cli has been setup"
+   safe -V
+
     echo "killing any prior vaults"
-    # cd safe-cli
-    cargo run -- vault killall
-    cargo run -- vault run-baby-fleming
-    # cd -
+    safe vault killall || true
+   echo "running baby flem"
+   
+   
+
+   safe vault run-baby-fleming
+
+   run_safe_authd
+    
+    # adding network
+   safe networks add my-network 
+   safe networks switch my-network 
+    
+    # setting up auth
+   safe auth restart
+   safe auth create-acc --test-coins
 }
 
-
-echo "running baby flem"
 download_and_run_safe_baby_fleming
+
