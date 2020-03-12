@@ -1,6 +1,6 @@
 name: PR
 
-on: [pull_request]
+on: [pull_request, push]
 
 env:
   # Run all cargo commands with --verbose.
