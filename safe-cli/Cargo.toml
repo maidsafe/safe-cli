@@ -59,6 +59,7 @@ predicates = "1.0.0"
 pretty_assertions = "0.6.1"
 safe-nd = "^0.8.0"
 unwrap = "~1.2.1"
+safe-utilities = { path = "../utilities" }
 
 [dev-dependencies.cargo-husky]
 version = "1"

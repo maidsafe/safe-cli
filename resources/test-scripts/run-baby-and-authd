@@ -1,13 +1,17 @@
 #!/bin/bash
 
+# Run a baby-fleming network
 set -e -x
 source ./resources/test-scripts/install-vault-and-authd
 
 [[ -z $SAFE_AUTHD_PATH ]] && export SAFE_AUTHD_PATH=~/safe-authd
 [[ -z $SAFE_VAULT_PATH ]] && export SAFE_VAULT_PATH=~/safe-vault
 
+# safe_vault_version=$1
+safe_vault_version="0.21.0"
 uname_output=$(uname -a)
 authd_bin_name="safe-authd"
+
 case $uname_output in
     MSYS_NT*)   # Windows in Jenkins
         authd_bin_name="safe-authd.exe"
@@ -17,10 +21,12 @@ case $uname_output in
         ;;
 esac
 
-function download_and_run_safe_vault() {
-  download_safe_vault
-  run_safe_vault
+function download_and_run_safe_baby_fleming() {
+    # First arg is safe vault desired
+  download_safe_vault $safe_vault_version
+  cargo run -- vault run-baby-fleming
 }
+
 
 function build_safe_authd() {
     cd safe-authd
@@ -47,3 +53,4 @@ function run_safe_authd() {
     sleep 15
     cd -
 }
+

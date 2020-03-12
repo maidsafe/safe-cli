@@ -7,7 +7,9 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
+
 mod common;
+
 
 #[macro_use]
 extern crate duct;
@@ -33,7 +35,7 @@ const ANOTHER_FILE: &str = "../testdata/another.md";
 const ANOTHER_FILE_CONTENT: &str = "exists";
 
 #[test]
-fn calling_safe_cat() {
+pub fn calling_safe_cat() {
     let content = cmd!(get_bin_location(), "files", "put", TEST_FILE, "--json")
         .read()
         .unwrap();
@@ -55,6 +57,8 @@ fn calling_safe_cat() {
         SafeDataType::PublishedImmutableData
     );
 }
+
+
 
 #[test]
 fn calling_safe_cat_on_relative_file_from_id_fails() {

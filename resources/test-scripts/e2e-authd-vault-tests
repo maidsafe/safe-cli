@@ -3,6 +3,7 @@
 set -e -x
 source ./resources/test-scripts/run-vault-and-authd
 
+echo $1
 # run the api tests with vault
 function run_api_tests_with_local_vault() {
     cd safe-api
