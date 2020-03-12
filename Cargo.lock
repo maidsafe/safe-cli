@@ -1496,7 +1496,7 @@ dependencies = [
  "hyper 0.13.2",
  "log 0.4.8",
  "rustls 0.17.0",
- "rustls-native-certs 0.3.0",
+ "rustls-native-certs",
  "tokio 0.2.13",
  "tokio-rustls",
  "webpki",
@@ -1609,7 +1609,7 @@ dependencies = [
  "directories 2.0.2",
  "futures 0.3.4",
  "log 0.4.8",
- "quinn",
+ "quinn 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.3",
  "rcgen",
  "serde",
@@ -2351,8 +2351,7 @@ dependencies = [
 [[package]]
 name = "quic-p2p"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39e78da19443425f02a6ec7bc894ee1e4289196b6ae0dccb700f8f0e891948cc"
+source = "git+https://github.com/maidsafe/quic-p2p?branch=baby-fleming-mobile#6dbadd35165b20d430a53b0e42f02e0f42729c05"
 dependencies = [
  "base64 0.10.1",
  "bincode",
@@ -2363,7 +2362,7 @@ dependencies = [
  "err-derive 0.2.2",
  "futures 0.3.4",
  "log 0.4.8",
- "quinn",
+ "quinn 0.5.3 (git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile)",
  "rcgen",
  "rustls 0.16.0",
  "serde",
@@ -2392,19 +2391,50 @@ dependencies = [
 [[package]]
 name = "quinn"
 version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a550f3a1c4c2f8e7156d62b423d029a5a82d0973adc603be02693c106c70b754"
+source = "git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile#e545f305fb31070dd128183fe143f52af114d839"
 dependencies = [
  "bytes 0.5.4",
- "ct-logs",
  "err-derive 0.2.2",
  "futures 0.3.4",
  "libc",
  "mio",
- "quinn-proto",
+ "quinn-proto 0.5.2 (git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile)",
  "rustls 0.16.0",
- "rustls-native-certs 0.1.0",
  "tokio 0.2.13",
+ "tracing",
+ "webpki",
+]
+
+[[package]]
+name = "quinn"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a550f3a1c4c2f8e7156d62b423d029a5a82d0973adc603be02693c106c70b754"
+dependencies = [
+ "bytes 0.5.4",
+ "err-derive 0.2.2",
+ "futures 0.3.4",
+ "libc",
+ "mio",
+ "quinn-proto 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls 0.16.0",
+ "tokio 0.2.13",
+ "tracing",
+ "webpki",
+]
+
+[[package]]
+name = "quinn-proto"
+version = "0.5.2"
+source = "git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile#e545f305fb31070dd128183fe143f52af114d839"
+dependencies = [
+ "bytes 0.5.4",
+ "err-derive 0.2.2",
+ "lazy_static",
+ "rand 0.7.3",
+ "ring",
+ "rustls 0.16.0",
+ "slab",
  "tracing",
  "webpki",
 ]
@@ -2901,18 +2931,6 @@ dependencies = [
 
 [[package]]
 name = "rustls-native-certs"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51ffebdbb48c14f84eba0b715197d673aff1dd22cc1007ca647e28483bbcc307"
-dependencies = [
- "openssl-probe",
- "rustls 0.16.0",
- "schannel",
- "security-framework 0.3.4",
-]
-
-[[package]]
-name = "rustls-native-certs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a75ffeb84a6bd9d014713119542ce415db3a3e4748f0bfce1e1416cd224a23a5"
@@ -2985,7 +3003,7 @@ dependencies = [
  "human-panic",
  "jsonrpc-quic",
  "log 0.4.8",
- "quinn",
+ "quinn 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rcgen",
  "safe-api",
  "self_update",
@@ -3078,8 +3096,7 @@ dependencies = [
 [[package]]
 name = "safe_app"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ef0dc653c4509f65b3066b5a6d7416e75564476de16e64929957899c0738f1f"
+source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#aaa28909aa8ee7bfd176c574538be47e58ce5d03"
 dependencies = [
  "bincode",
  "env_logger 0.6.2",
@@ -3105,8 +3122,7 @@ dependencies = [
 [[package]]
 name = "safe_authenticator"
 version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a8d6c5f6d2a1d29d130a74ccc84d216ebafda2fc4a9bb3abc1a6b44ff1494de"
+source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#aaa28909aa8ee7bfd176c574538be47e58ce5d03"
 dependencies = [
  "bincode",
  "env_logger 0.6.2",
@@ -3146,8 +3162,7 @@ dependencies = [
 [[package]]
 name = "safe_core"
 version = "0.39.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89ca577cdb4e24c6e5f21ac355532d16d61e2389a0d5e7bd91e899d864c233f9"
+source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#aaa28909aa8ee7bfd176c574538be47e58ce5d03"
 dependencies = [
  "bincode",
  "bytes 0.4.12",
