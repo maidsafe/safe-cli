@@ -60,8 +60,13 @@ pretty_assertions = "0.6.1"
 safe-nd = "^0.8.0"
 unwrap = "~1.2.1"
 safe-utilities = { path = "../utilities" }
+criterion = "0.3"
 
 [dev-dependencies.cargo-husky]
 version = "1"
 default-features = false
 features = ["precommit-hook","user-hooks"]
+
+[[bench]]
+name = "benches"
+harness = false

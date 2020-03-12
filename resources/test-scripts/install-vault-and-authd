@@ -3,10 +3,18 @@
 # Run a baby-fleming network
 set -e -x
 
-[[ -z $SAFE_AUTHD_PATH ]] && export SAFE_AUTHD_PATH=~/safe-authd
-[[ -z $SAFE_VAULT_PATH ]] && export SAFE_VAULT_PATH=~/safe-vault
+[[ -z $SAFE_AUTHD_PATH ]] && export SAFE_AUTHD_PATH=~/.safe/authd
+[[ -z $SAFE_VAULT_PATH ]] && export SAFE_VAULT_PATH=~/.safe/vault
 
-safe_vault_version=$1
+
+if [ -n "$1" ]; then
+    vault_version=$1
+else
+    vault_version="0.21.0"
+fi
+
+echo "Installing SAFE Vault $vault_version"
+
 uname_output=$(uname -a)
 authd_bin_name="safe-authd"
 case $uname_output in
