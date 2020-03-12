@@ -42,7 +42,8 @@ default-features = false
 features = ["authenticator", "authd_client"]
 
 [dependencies.quinn]
-version = "^0.5.3"
+git = "https://github.com/lionel1704/quinn"
+branch = "baby-fleming-mobile"
 default-features = false
 
 [dependencies.self_update]
