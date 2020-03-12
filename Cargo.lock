@@ -1028,7 +1028,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "ffi_utils"
 version = "0.15.0"
-source = "git+https://github.com/maidsafe/ffi_utils.git?rev=577074aed64cb05df7c17549a938ca7a45cfeb8d#577074aed64cb05df7c17549a938ca7a45cfeb8d"
+source = "git+https://github.com/joshuef/ffi_utils.git?rev=b463169d705d#b463169d705dfda6111eabaaafd2222b80f474d0"
 dependencies = [
  "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2952,7 +2952,7 @@ name = "safe-ffi"
 version = "0.9.0"
 dependencies = [
  "async-std 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ffi_utils 0.15.0 (git+https://github.com/maidsafe/ffi_utils.git?rev=577074aed64cb05df7c17549a938ca7a45cfeb8d)",
+ "ffi_utils 0.15.0 (git+https://github.com/joshuef/ffi_utils.git?rev=b463169d705d)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "safe-api 0.9.0",
  "safe-nd 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3010,7 +3010,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bincode 1.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "ffi_utils 0.15.0 (git+https://github.com/maidsafe/ffi_utils.git?rev=577074aed64cb05df7c17549a938ca7a45cfeb8d)",
+ "ffi_utils 0.15.0 (git+https://github.com/joshuef/ffi_utils.git?rev=b463169d705d)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "jni 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3036,7 +3036,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bincode 1.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "ffi_utils 0.15.0 (git+https://github.com/maidsafe/ffi_utils.git?rev=577074aed64cb05df7c17549a938ca7a45cfeb8d)",
+ "ffi_utils 0.15.0 (git+https://github.com/joshuef/ffi_utils.git?rev=b463169d705d)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "jni 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3080,7 +3080,7 @@ dependencies = [
  "data-encoding 2.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "directories 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "ffi_utils 0.15.0 (git+https://github.com/maidsafe/ffi_utils.git?rev=577074aed64cb05df7c17549a938ca7a45cfeb8d)",
+ "ffi_utils 0.15.0 (git+https://github.com/joshuef/ffi_utils.git?rev=b463169d705d)",
  "fs2 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "hmac 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4518,7 +4518,7 @@ dependencies = [
 "checksum failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "f8273f13c977665c5db7eb2b99ae520952fe5ac831ae4cd09d80c4c7042b5ed9"
 "checksum failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "0bc225b78e0391e4b8683440bf2e63c2deeeb2ce5189eab46e2b68c6d3725d08"
 "checksum fake-simd 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "e88a8acf291dafb59c2d96e8f59828f3838bb1a70398823ade51a84de6a6deed"
-"checksum ffi_utils 0.15.0 (git+https://github.com/maidsafe/ffi_utils.git?rev=577074aed64cb05df7c17549a938ca7a45cfeb8d)" = "<none>"
+"checksum ffi_utils 0.15.0 (git+https://github.com/joshuef/ffi_utils.git?rev=b463169d705d)" = "<none>"
 "checksum filetime 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)" = "1ff6d4dab0aa0c8e6346d46052e93b13a16cf847b54ed357087c35011048cc7d"
 "checksum fixedbitset 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)" = "86d4de0081402f5e88cdac65c8dcdcc73118c1a7a465e2a05f0da05843a8ea33"
 "checksum flate2 1.0.13 (registry+https://github.com/rust-lang/crates.io-index)" = "6bd6d6f4752952feb71363cffc9ebac9411b75b87c6ab6058c40c8900cf43c0f"

@@ -24,13 +24,13 @@ pub fn calling_safe_cat() -> () {
     // safe_utilities::shared_code();
 }
 
-fn fibonacci(n: u64) -> u64 {
-    match n {
-        0 => 1,
-        1 => 1,
-        n => fibonacci(n-1) + fibonacci(n-2),
-    }
-}
+// fn fibonacci(n: u64) -> u64 {
+//     match n {
+//         0 => 1,
+//         1 => 1,
+//         n => fibonacci(n-1) + fibonacci(n-2),
+//     }
+// }
 
 // #[cfg(test)]
 // mod tests {
@@ -44,10 +44,13 @@ fn fibonacci(n: u64) -> u64 {
         //     b.iter(|| calling_safe_cat());
         // }
 
-        fn criterion_benchmark(c: &mut Criterion) {
-            c.bench_function("fib 20", |b| b.iter(|| fibonacci(black_box(20))));
+        fn bench_cli_put(c: &mut Criterion) {
+            c.bench_function("cliii_put", |b| b.iter(|| cmd!(get_bin_location(), "files", "put", TEST_FILE, "--json")
+            .read()
+            .unwrap()
+        ));
         }
     
-        criterion_group!(benches, criterion_benchmark);
+        criterion_group!(benches, bench_cli_put);
         criterion_main!(benches);
 // }

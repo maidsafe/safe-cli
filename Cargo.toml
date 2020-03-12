@@ -2,4 +2,4 @@
 members = ["safe-cli", "safe-api", "safe-ffi", "safe-authd", "jsonrpc-quic"]
 
 [patch.crates-io]
-ffi_utils = { git = "https://github.com/maidsafe/ffi_utils.git", rev = "577074aed64cb05df7c17549a938ca7a45cfeb8d" }
+ffi_utils = { git = "https://github.com/joshuef/ffi_utils.git", rev = "b463169d705d" }
