@@ -812,7 +812,9 @@ mod tests {
             .append_seq_append_only_data(data2, wrong_new_version, xorname, type_tag)
         {
             Ok(_) => panic!("No error thrown when passing an outdated new version"),
-            Err(Error::NetDataError(msg)) => assert!(msg.contains("Invalid data successor")),
+            Err(Error::NetDataError(msg)) => {
+                assert!(msg.contains("Failed to UPDATE Sequenced Append Only Data"))
+            }
             _ => panic!("Error returned is not the expected one"),
         }
     }
