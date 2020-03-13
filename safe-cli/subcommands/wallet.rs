@@ -143,7 +143,7 @@ pub fn wallet_commander(
                 };
 
                 // insert and set as default
-                safe.wallet_insert(&wallet_xorurl, name.as_ref().map(String::as_str), true, &sk)?;
+                safe.wallet_insert(&wallet_xorurl, name.as_deref(), true, &sk)?;
             }
 
             if OutputFmt::Pretty == output_fmt {
@@ -219,8 +219,7 @@ pub fn wallet_commander(
                 None => get_secret_key("", secret_key, "the SafeKey to insert")?,
             };
 
-            let the_name =
-                safe.wallet_insert(&target, name.as_ref().map(String::as_str), default, &sk)?;
+            let the_name = safe.wallet_insert(&target, name.as_deref(), default, &sk)?;
             if OutputFmt::Pretty == output_fmt {
                 println!(
                     "Spendable balance inserted with name '{}' in Wallet located at \"{}\"",
@@ -243,12 +242,7 @@ pub fn wallet_commander(
                 Some("...awaiting destination Wallet/SafeKey URL from STDIN stream..."),
             )?;
 
-            let tx_id = safe.wallet_transfer(
-                &amount,
-                from.as_ref().map(String::as_str),
-                &destination,
-                tx_id,
-            )?;
+            let tx_id = safe.wallet_transfer(&amount, from.as_deref(), &destination, tx_id)?;
 
             if OutputFmt::Pretty == output_fmt {
                 println!("Success. TX_ID: {}", &tx_id);
