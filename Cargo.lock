@@ -2366,7 +2366,7 @@ dependencies = [
 [[package]]
 name = "quinn"
 version = "0.5.3"
-source = "git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile#e545f305fb31070dd128183fe143f52af114d839"
+source = "git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile#6f977aa3e3afcbad0a8a6a129ff094e7067712ef"
 dependencies = [
  "bytes 0.5.4",
  "err-derive 0.2.3",
@@ -2383,7 +2383,7 @@ dependencies = [
 [[package]]
 name = "quinn-proto"
 version = "0.5.2"
-source = "git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile#e545f305fb31070dd128183fe143f52af114d839"
+source = "git+https://github.com/lionel1704/quinn?branch=baby-fleming-mobile#6f977aa3e3afcbad0a8a6a129ff094e7067712ef"
 dependencies = [
  "bytes 0.5.4",
  "err-derive 0.2.3",
@@ -3036,7 +3036,7 @@ dependencies = [
 [[package]]
 name = "safe_app"
 version = "0.14.0"
-source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#aaa28909aa8ee7bfd176c574538be47e58ce5d03"
+source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#62969a61bda71a688c51799a5238cdf78e199d93"
 dependencies = [
  "bincode",
  "env_logger 0.6.2",
@@ -3062,7 +3062,7 @@ dependencies = [
 [[package]]
 name = "safe_authenticator"
 version = "0.14.0"
-source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#aaa28909aa8ee7bfd176c574538be47e58ce5d03"
+source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#62969a61bda71a688c51799a5238cdf78e199d93"
 dependencies = [
  "bincode",
  "env_logger 0.6.2",
@@ -3102,7 +3102,7 @@ dependencies = [
 [[package]]
 name = "safe_core"
 version = "0.39.0"
-source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#aaa28909aa8ee7bfd176c574538be47e58ce5d03"
+source = "git+https://github.com/maidsafe/safe_client_libs?branch=baby-fleming-mobile#62969a61bda71a688c51799a5238cdf78e199d93"
 dependencies = [
  "bincode",
  "bytes 0.4.12",
