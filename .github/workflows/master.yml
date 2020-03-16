@@ -430,30 +430,30 @@ jobs:
         with:
           name: safe-ffi-x86_64-apple-darwin-dev
           path: artifacts/safe-ffi/dev/x86_64-apple-darwin/release
-      # - uses: actions/download-artifact@master
-      #   with:
-      #     name: safe-ffi-armv7-linux-androideabi-prod
-      #     path: artifacts/safe-ffi/prod/armv7-linux-androideabi/release
-      # - uses: actions/download-artifact@master
-      #   with:
-      #     name: safe-ffi-armv7-linux-androideabi-dev
-      #     path: artifacts/safe-ffi/dev/armv7-linux-androideabi/release
-      # - uses: actions/download-artifact@master
-      #   with:
-      #     name: safe-ffi-x86_64-linux-android-prod
-      #     path: artifacts/safe-ffi/prod/x86_64-linux-android/release
-      # - uses: actions/download-artifact@master
-      #   with:
-      #     name: safe-ffi-x86_64-linux-android-dev
-      #     path: artifacts/safe-ffi/dev/x86_64-linux-android/release
-      # - uses: actions/download-artifact@master
-      #   with:
-      #     name: safe-ffi-apple-ios-prod
-      #     path: artifacts/safe-ffi/prod/apple-ios/release
-      # - uses: actions/download-artifact@master
-      #   with:
-      #     name: safe-ffi-apple-ios-dev
-      #     path: artifacts/safe-ffi/dev/apple-ios/release
+      - uses: actions/download-artifact@master
+        with:
+          name: safe-ffi-armv7-linux-androideabi-prod
+          path: artifacts/safe-ffi/prod/armv7-linux-androideabi/release
+      - uses: actions/download-artifact@master
+        with:
+          name: safe-ffi-armv7-linux-androideabi-dev
+          path: artifacts/safe-ffi/dev/armv7-linux-androideabi/release
+      - uses: actions/download-artifact@master
+        with:
+          name: safe-ffi-x86_64-linux-android-prod
+          path: artifacts/safe-ffi/prod/x86_64-linux-android/release
+      - uses: actions/download-artifact@master
+        with:
+          name: safe-ffi-x86_64-linux-android-dev
+          path: artifacts/safe-ffi/dev/x86_64-linux-android/release
+      - uses: actions/download-artifact@master
+        with:
+          name: safe-ffi-apple-ios-prod
+          path: artifacts/safe-ffi/prod/apple-ios/release
+      - uses: actions/download-artifact@master
+        with:
+          name: safe-ffi-apple-ios-dev
+          path: artifacts/safe-ffi/dev/apple-ios/release
 
       # Get information for the release.
       - shell: bash
