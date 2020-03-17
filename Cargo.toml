@@ -1,2 +1,5 @@
 [workspace]
 members = ["safe-cli", "safe-api", "safe-ffi", "safe-authd", "jsonrpc-quic"]
+
+[patch.crates-io]
+err-derive = { git = "https://gitlab.com/torkleyy/err-derive"}
