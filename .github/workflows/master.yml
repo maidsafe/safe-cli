@@ -503,24 +503,24 @@ jobs:
       # Upload all the release archives to S3; FFI links will be in the release description.
       # Only uploads when that version has changed to avoid accidental overwrite with new local api changes eg.
       - name: Upload cli prod to S3
-        run: aws s3 sync deploy/prod/safe-cli* s3://safe-api --size-only --acl public-read
+        run: aws s3 sync deploy/prod s3://safe-api --size-only --acl public-read --exclude "*" --include "safe-cli*"
         if: contains(steps.commit_message.outputs.commit_message, 'safe-cli')
       - name: Upload authd prod to S3
-        run: aws s3 sync deploy/prod/safe-authd* s3://safe-api --size-only --acl public-read
+        run: aws s3 sync deploy/prod s3://safe-api --size-only --acl public-read --exclude "*" --include "safe-authd*"
         if: contains(steps.commit_message.outputs.commit_message, 'safe-authd')
       - name: Upload ffi prod to S3
-        run: aws s3 sync deploy/prod/safe-ffi* s3://safe-api --size-only --acl public-read
+        run: aws s3 sync deploy/prod s3://safe-api --size-only --acl public-read --exclude "*" --include "safe-ffi*"
         if: contains(steps.commit_message.outputs.commit_message, 'safe-ffi')
 
       # And same for dev releases
       - name: Upload authd dev to S3
-        run: aws s3 sync deploy/dev/safe-authd* s3://safe-api --acl public-read
+        run: aws s3 sync deploy/dev s3://safe-api --size-only --acl public-read --exclude "*" --include "safe-cli*"
         if: contains(steps.commit_message.outputs.commit_message, 'safe-authd')
       - name: Upload cli dev to S3
-        run: aws s3 sync deploy/dev/safe-cli* s3://safe-api --acl public-read
+        run: aws s3 sync deploy/dev s3://safe-api --size-only --acl public-read --exclude "*" --include "safe-authd*"
         if: contains(steps.commit_message.outputs.commit_message, 'safe-cli')
       - name: Upload ffi dev to S3
-        run: aws s3 sync deploy/dev/safe-ffi* s3://safe-api --acl public-read
+        run: aws s3 sync deploy/dev s3://safe-api --size-only --acl public-read --exclude "*" --include "safe-ffi*"
         if: contains(steps.commit_message.outputs.commit_message, 'safe-ffi')
 
 
