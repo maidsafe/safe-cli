@@ -501,18 +501,36 @@ jobs:
         if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
 
       # Upload all the release archives to S3; FFI links will be in the release description.
-      - name: Upload prod to S3
-        run: aws s3 sync deploy/prod s3://safe-api --size-only --acl public-read
-      - name: Upload dev to S3
-        run: aws s3 sync deploy/dev s3://safe-api --acl public-read
+      # Only uploads when that version has changed to avoid accidental overwrite with new local api changes eg.
+      - name: Upload cli prod to S3
+        run: aws s3 sync deploy/prod/safe-cli* s3://safe-api --size-only --acl public-read
+        if: contains(steps.commit_message.outputs.commit_message, 'safe-cli')
+      - name: Upload authd prod to S3
+        run: aws s3 sync deploy/prod/safe-authd* s3://safe-api --size-only --acl public-read
+        if: contains(steps.commit_message.outputs.commit_message, 'safe-authd')
+      - name: Upload ffi prod to S3
+        run: aws s3 sync deploy/prod/safe-ffi* s3://safe-api --size-only --acl public-read
+        if: contains(steps.commit_message.outputs.commit_message, 'safe-ffi')
+
+      # And same for dev releases
+      - name: Upload authd dev to S3
+        run: aws s3 sync deploy/dev/safe-authd* s3://safe-api --acl public-read
+        if: contains(steps.commit_message.outputs.commit_message, 'safe-authd')
+      - name: Upload cli dev to S3
+        run: aws s3 sync deploy/dev/safe-cli* s3://safe-api --acl public-read
+        if: contains(steps.commit_message.outputs.commit_message, 'safe-cli')
+      - name: Upload ffi dev to S3
+        run: aws s3 sync deploy/dev/safe-ffi* s3://safe-api --acl public-read
+        if: contains(steps.commit_message.outputs.commit_message, 'safe-ffi')
 
 
       # Create the release and attach safe-cli archives as assets.
       - uses: csexton/create-release@add-body
         id: create_release
         with:
-          tag_name: ${{ steps.versioning.outputs.cli_version }}
-          release_name: safe-cli
+          # Lets make the tag/name relvant to _only_ the changed parts in this.
+          tag_name: format( steps.commit_message, "Version change:", "" )
+          release_name: format( steps.commit_message, "Version change:", "" )
           draft: false
           prerelease: false
           body: ${{ steps.release_description.outputs.description }}
