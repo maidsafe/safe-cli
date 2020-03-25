@@ -16,6 +16,7 @@ pub use ffi::fetch::*;
 pub use ffi::ffi_structs::*;
 pub use ffi::files::*;
 pub use ffi::helpers::*;
+pub use ffi::ipc::*;
 pub use ffi::keys::*;
 pub use ffi::logging::*;
 pub use ffi::nrs::*;
