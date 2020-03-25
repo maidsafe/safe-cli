@@ -42,7 +42,7 @@ default-features = false
 features = ["authenticator", "authd_client"]
 
 [dependencies.quinn]
-version = "^0.5.3"
+version = "^0.6.0"
 default-features = false
 
 [dependencies.self_update]

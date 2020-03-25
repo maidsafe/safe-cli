@@ -75,8 +75,8 @@ fn start_listening(
     let jsonrpc_quic_endpoint = Endpoint::new(cert_base_path, idle_timeout)
         .map_err(|err| Error::GeneralError(format!("Failed to create endpoint: {}", err)))?;
 
-    let mut runtime = Builder::new().threaded_scheduler().enable_all().build()?;
-    let (endpoint_driver, mut incoming_conn) = runtime
+    let runtime = Builder::new().threaded_scheduler().enable_all().build()?;
+    let mut incoming_conn = runtime
         .enter(|| jsonrpc_quic_endpoint.bind(&listen_socket_addr))
         .map_err(|err| Error::GeneralError(format!("Failed to bind endpoint: {}", err)))?;
     println!("Listening on {}", listen_socket_addr);
@@ -90,10 +90,9 @@ fn start_listening(
     });
 
     runtime.spawn(async move {
-        while let Some((driver, conn)) = incoming_conn.get_next().await {
+        while let Some(conn) = incoming_conn.get_next().await {
             tokio::spawn({
                 handle_connection(
-                    driver,
                     conn,
                     safe_auth_handle.clone(),
                     auth_reqs_handle.clone(),
@@ -103,19 +102,16 @@ fn start_listening(
             });
         }
     });
-    runtime.block_on(endpoint_driver)?;
 
     Ok(())
 }
 
 async fn handle_connection(
-    driver: quinn::ConnectionDriver,
     mut conn: IncomingJsonRpcRequest,
     safe_auth_handle: SharedSafeAuthenticatorHandle,
     auth_reqs_handle: SharedAuthReqsHandle,
     notif_endpoints_handle: SharedNotifEndpointsHandle,
 ) -> Result<()> {
-    tokio::spawn(driver);
     async {
         // Each stream initiated by the client constitutes a new request.
         while let Some((jsonrpc_req, send)) = conn.get_next().await {
