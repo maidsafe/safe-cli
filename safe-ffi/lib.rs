@@ -17,6 +17,7 @@ pub use ffi::ffi_structs::*;
 pub use ffi::files::*;
 pub use ffi::helpers::*;
 pub use ffi::keys::*;
+pub use ffi::logging::*;
 pub use ffi::nrs::*;
 pub use ffi::wallet::*;
 pub use ffi::xorurl::*;

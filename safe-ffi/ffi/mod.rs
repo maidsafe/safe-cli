@@ -17,6 +17,7 @@ pub mod ffi_structs;
 pub mod files;
 pub mod helpers;
 pub mod keys;
+pub mod logging;
 pub mod nrs;
 pub mod wallet;
 pub mod xorurl;
