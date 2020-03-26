@@ -24,16 +24,7 @@ impl ClientEndpoint {
     // idle_timeout: Optional number of millis before timing out an idle connection
     // keylog: Perform NSS-compatible TLS key logging to the file specified in `SSLKEYLOGFILE`
     pub fn new(cert_base_path: &str, idle_timeout: Option<u64>, keylog: bool) -> Result<Self> {
-        let client_config = if let Some(timeout) = idle_timeout {
-            quinn::ClientConfig {
-                transport: Arc::new(utils::new_transport_cfg(timeout)?),
-                crypto: Default::default(),
-            }
-        } else {
-            quinn::ClientConfig::default()
-        };
-
-        let mut client_config = quinn::ClientConfigBuilder::new(client_config);
+        let mut client_config = quinn::ClientConfigBuilder::default();
         client_config.protocols(ALPN_QUIC_HTTP);
 
         if keylog {
@@ -66,7 +57,10 @@ impl ClientEndpoint {
                 ))
             })?;
 
-        let config = client_config.build();
+        let mut config = client_config.build();
+        if let Some(timeout) = idle_timeout {
+            config.transport = Arc::new(utils::new_transport_cfg(timeout)?)
+        };
         Ok(Self { config })
     }
 
