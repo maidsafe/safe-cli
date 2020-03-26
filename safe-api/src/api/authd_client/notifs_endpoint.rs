@@ -36,7 +36,7 @@ pub fn jsonrpc_listen(
     let jsonrpc_quic_endpoint = Endpoint::new(cert_base_path, None)
         .map_err(|err| format!("Failed to create endpoint: {}", err))?;
 
-    let runtime = Builder::new()
+    let mut runtime = Builder::new()
         .threaded_scheduler()
         .enable_all()
         .build()
@@ -46,7 +46,7 @@ pub fn jsonrpc_listen(
         .enter(|| jsonrpc_quic_endpoint.bind(&listen_socket_addr))
         .map_err(|err| format!("Failed to bind endpoint: {}", err))?;
 
-    runtime.spawn({
+    runtime.block_on({
         async move {
             while let Some(conn) = incoming_conn.get_next().await {
                 tokio::spawn(handle_connection(conn, notif_channel.clone()));

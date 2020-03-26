@@ -75,7 +75,7 @@ fn start_listening(
     let jsonrpc_quic_endpoint = Endpoint::new(cert_base_path, idle_timeout)
         .map_err(|err| Error::GeneralError(format!("Failed to create endpoint: {}", err)))?;
 
-    let runtime = Builder::new().threaded_scheduler().enable_all().build()?;
+    let mut runtime = Builder::new().threaded_scheduler().enable_all().build()?;
     let mut incoming_conn = runtime
         .enter(|| jsonrpc_quic_endpoint.bind(&listen_socket_addr))
         .map_err(|err| Error::GeneralError(format!("Failed to bind endpoint: {}", err)))?;
@@ -89,7 +89,7 @@ fn start_listening(
         monitor_pending_auth_reqs(auth_reqs_handle2, notif_endpoints_handle2).await
     });
 
-    runtime.spawn(async move {
+    runtime.block_on(async move {
         while let Some(conn) = incoming_conn.get_next().await {
             tokio::spawn({
                 handle_connection(
