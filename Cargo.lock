@@ -958,25 +958,11 @@ dependencies = [
 
 [[package]]
 name = "err-derive"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b41487fadaa500d02a819eefcde5f713599a01dd51626ef25d2d72d87115667b"
-dependencies = [
- "proc-macro-error 0.2.6",
- "proc-macro2 1.0.9",
- "quote 1.0.3",
- "rustc_version",
- "syn 1.0.17",
- "synstructure",
-]
-
-[[package]]
-name = "err-derive"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82f46c91bbed409ee74495549acbfcc7fae856e712e1df15afe75d0775eedc6c"
 dependencies = [
- "proc-macro-error 0.4.12",
+ "proc-macro-error",
  "proc-macro2 1.0.9",
  "quote 1.0.3",
  "rustversion",
@@ -2347,17 +2333,6 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-error"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aeccfe4d5d8ea175d5f0e4a2ad0637e0f4121d63bd99d356fb1f39ab2e7c6097"
-dependencies = [
- "proc-macro2 1.0.9",
- "quote 1.0.3",
- "syn 1.0.17",
-]
-
-[[package]]
-name = "proc-macro-error"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "18f33027081eba0a6d8aba6d1b1c3a3be58cbb12106341c2d5759fcd9b5277e7"
@@ -2437,7 +2412,7 @@ dependencies = [
  "crossbeam-channel 0.3.9",
  "derive_more",
  "directories 1.0.2",
- "err-derive 0.2.3",
+ "err-derive",
  "futures 0.3.4",
  "log 0.4.8",
  "quinn",
@@ -2473,7 +2448,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cea81de5e0f97f552239ce4eff6fa8e8b0e3ec0ba5a8f1d84fb2096f4ba2ad41"
 dependencies = [
  "bytes 0.5.4",
- "err-derive 0.2.3",
+ "err-derive",
  "futures 0.3.4",
  "libc",
  "mio",
@@ -2491,7 +2466,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b70cb5efbbd520ef4a5361fb0ec64360dcd873cfb76c1be2f1d2594729d7b5a"
 dependencies = [
  "bytes 0.5.4",
- "err-derive 0.2.3",
+ "err-derive",
  "rand 0.7.3",
  "ring",
  "rustls",
@@ -3594,7 +3569,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f88b8e18c69496aad6f9ddf4630dd7d585bcaf765786cb415b9aec2fe5a0430"
 dependencies = [
  "heck",
- "proc-macro-error 0.4.12",
+ "proc-macro-error",
  "proc-macro2 1.0.9",
  "quote 1.0.3",
  "syn 1.0.17",
@@ -4495,9 +4470,9 @@ dependencies = [
 
 [[package]]
 name = "widestring"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a212922ea58fbf5044f83663aa4fc6281ff890f1fd7546c0c3f52f5290831781"
+checksum = "effc0e4ff8085673ea7b9b2e3c73f6bd4d118810c9009ed8f1e16bd96c331db6"
 
 [[package]]
 name = "winapi"
@@ -4507,12 +4482,21 @@ checksum = "167dc9d6949a9b857f3451275e911c3f44255842c1f7a76f33c55103a909087a"
 
 [[package]]
 name = "winapi"
+version = "0.3.7"
+source = "git+https://github.com/mullvad/winapi-rs.git?rev=4bcf5cab87124bbeef8c1a445137494d874f8082#4bcf5cab87124bbeef8c1a445137494d874f8082"
+dependencies = [
+ "winapi-i686-pc-windows-gnu 0.4.0 (git+https://github.com/mullvad/winapi-rs.git?rev=4bcf5cab87124bbeef8c1a445137494d874f8082)",
+ "winapi-x86_64-pc-windows-gnu 0.4.0 (git+https://github.com/mullvad/winapi-rs.git?rev=4bcf5cab87124bbeef8c1a445137494d874f8082)",
+]
+
+[[package]]
+name = "winapi"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8093091eeb260906a183e6ae1abdba2ef5ef2257a21801128899c3fc699229c6"
 dependencies = [
- "winapi-i686-pc-windows-gnu",
- "winapi-x86_64-pc-windows-gnu",
+ "winapi-i686-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi-x86_64-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4520,6 +4504,11 @@ name = "winapi-build"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d315eee3b34aca4797b2da6b13ed88266e6d612562a0c46390af8299fc699bc"
+
+[[package]]
+name = "winapi-i686-pc-windows-gnu"
+version = "0.4.0"
+source = "git+https://github.com/mullvad/winapi-rs.git?rev=4bcf5cab87124bbeef8c1a445137494d874f8082#4bcf5cab87124bbeef8c1a445137494d874f8082"
 
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
@@ -4539,19 +4528,23 @@ dependencies = [
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
+source = "git+https://github.com/mullvad/winapi-rs.git?rev=4bcf5cab87124bbeef8c1a445137494d874f8082#4bcf5cab87124bbeef8c1a445137494d874f8082"
+
+[[package]]
+name = "winapi-x86_64-pc-windows-gnu"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "windows-service"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "048b185a91d03beafe88c5db975c42c12b9462bc939f92ca863c88785a33a6ab"
+source = "git+https://github.com/mullvad/windows-service-rs#202d88bf438fdb870f4fc26e2031d36ab083fc42"
 dependencies = [
  "bitflags 1.2.1",
- "err-derive 0.1.6",
+ "err-derive",
  "widestring",
- "winapi 0.3.8",
+ "winapi 0.3.7",
 ]
 
 [[package]]
