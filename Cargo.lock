@@ -3065,17 +3065,17 @@ dependencies = [
 name = "safe-ffi"
 version = "0.11.0"
 dependencies = [
- "async-std 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "bincode 1.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "ffi_utils 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "safe-api 0.10.1",
- "safe-nd 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "safe_bindgen 0.13.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "safe_core 0.39.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.44 (registry+https://github.com/rust-lang/crates.io-index)",
- "unwrap 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "async-std",
+ "bincode",
+ "ffi_utils",
+ "log 0.4.8",
+ "safe-api",
+ "safe-nd",
+ "safe_bindgen",
+ "safe_core",
+ "serde",
+ "serde_json",
+ "unwrap",
 ]
 
 [[package]]
