@@ -352,7 +352,7 @@ fn prompt_sensitive(arg: Option<String>, msg: &str) -> Result<String, String> {
     if let Some(str) = arg {
         Ok(str)
     } else {
-        rpassword::read_password_from_tty(Some(msg))
+        rpassword::prompt_password_stdout(msg)
             .map_err(|err| format!("Failed reading string from input: {}", err))
     }
 }
