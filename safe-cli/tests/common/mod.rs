@@ -120,6 +120,26 @@ pub fn upload_test_folder() -> (String, ProcessedFiles) {
 }
 
 #[allow(dead_code)]
+pub fn create_nrs_link(name: &str, link: &str) -> Result<String, String> {
+    let nrs_creation = cmd!(
+        get_bin_location(),
+        "nrs",
+        "create",
+        &name,
+        "-l",
+        &link,
+        "--json"
+    )
+    .read()
+    .unwrap();
+
+    let (nrs_map_xorurl, _change_map) = parse_nrs_create_output(&nrs_creation);
+    assert!(nrs_map_xorurl.contains("safe://"));
+
+    Ok(nrs_map_xorurl)
+}
+
+#[allow(dead_code)]
 pub fn get_random_nrs_string() -> String {
     thread_rng().sample_iter(&Alphanumeric).take(15).collect()
 }

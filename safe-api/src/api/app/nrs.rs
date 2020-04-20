@@ -71,17 +71,12 @@ impl Safe {
         &self,
         url: &str,
     ) -> Result<(XorUrlEncoder, Option<XorUrlEncoder>)> {
-        let xorurl_encoder = Safe::parse_url(url)?;
-        if xorurl_encoder.content_type() == SafeContentType::NrsMapContainer {
-            let (_version, nrs_map) = self.nrs_map_container_get(&url).await.map_err(|_| {
-                Error::InvalidInput(
-                    "The location couldn't be resolved from the NRS URL provided".to_string(),
-                )
-            })?;
-            let xorurl = nrs_map.resolve_for_subnames(xorurl_encoder.sub_names())?;
-            Ok((XorUrlEncoder::from_url(&xorurl)?, Some(xorurl_encoder)))
+        let resolved = XorUrlEncoder::from_url(&self.resolve_to_xorurl(url).await?)?;
+        let input = Self::parse_url(url)?;
+        if input.xorname() != resolved.xorname() {
+            Ok((resolved, Some(input)))
         } else {
-            Ok((xorurl_encoder, None))
+            Ok((resolved, None))
         }
     }
 
@@ -305,6 +300,10 @@ impl Safe {
                 err
             ))),
         }
+    }
+
+    pub fn is_nrs(e: &XorUrlEncoder) -> bool {
+        e.type_tag() == NRS_MAP_TYPE_TAG
     }
 }
 

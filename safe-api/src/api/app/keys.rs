@@ -416,8 +416,8 @@ mod tests {
             .keys_balance_from_url(&invalid_xorurl, &unwrap_key_pair(key_pair)?.sk)
             .await;
         match current_balance {
-            Err(Error::InvalidInput(msg)) => {
-                assert!(msg.contains("The location couldn't be resolved from the NRS URL provided"));
+            Err(Error::ContentNotFound(msg)) => {
+                assert!(msg.contains("Content not found at"));
                 Ok(())
             }
             Err(err) => Err(Error::Unexpected(format!(

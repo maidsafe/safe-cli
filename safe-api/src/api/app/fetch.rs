@@ -140,6 +140,17 @@ impl Safe {
     pub async fn inspect(&self, url: &str) -> Result<SafeData> {
         retrieve_from_url(self, url, false, None).await
     }
+
+    /// # Resolves a safe:// URL, which may be a chain of NRS urls, to a final XOR-URL.
+    pub async fn resolve_to_xorurl(&self, url: &str) -> Result<String> {
+        resolve_to_xorurl(self, url).await
+    }
+
+    /// # Inspects a safe:// URL, which may be a chain of NRS urls, and returns all links
+    ///   in the chain along with associated xorurl's.
+    pub async fn inspect_to_xorurl(&self, url: &str) -> Result<Vec<(String, Option<String>)>> {
+        inspect_to_xorurl(self, url).await
+    }
 }
 
 async fn retrieve_from_url(
@@ -386,6 +397,77 @@ async fn resolve_one_indirection(
             Ok((ResolutionStep::Data(safe_data), None))
         }
     }
+}
+
+async fn resolve_to_xorurl(safe: &Safe, url: &str) -> Result<String> {
+    let mut resolved_urls = inspect_to_xorurl(&safe, &url).await?;
+
+    if let Some((xorurl, _)) = resolved_urls.pop() {
+        Ok(xorurl)
+    } else {
+        // weird... we shouldn't really get here
+        Err(Error::Unexpected(format!("Failed to resolve {}", url)))
+    }
+}
+
+async fn inspect_to_xorurl(safe: &Safe, url: &str) -> Result<Vec<(String, Option<String>)>> {
+    // Let's create a list keeping track each of the resolution hops we go through
+    let mut resolved_urls = Vec::<(String, Option<String>)>::new();
+    let mut next_to_resolve = Some(url.to_string());
+    while let Some(next_url) = next_to_resolve {
+        if resolved_urls.len() == INDIRECTION_LIMIT as usize {
+            break;
+        }
+
+        let (xor_url, nrs_url_option) = resolve_nrs_one_indirection(safe, &next_url).await?;
+
+        resolved_urls.push((xor_url, nrs_url_option.clone()));
+
+        match nrs_url_option {
+            Some(nrs_url) => next_to_resolve = Some(nrs_url),
+            None => {
+                break;
+            }
+        }
+    }
+
+    info!("resolved urls: {:#?}", resolved_urls);
+
+    Ok(resolved_urls)
+}
+
+async fn resolve_nrs_one_indirection(safe: &Safe, url: &str) -> Result<(String, Option<String>)> {
+    let xor = Safe::parse_url(url)?;
+    if !Safe::is_nrs(&xor) {
+        return Ok((url.to_string(), None));
+    }
+
+    let (_version, nrs_map) = safe
+        .nrs_map_container_get(&url)
+        .await
+        .map_err(|_| Error::ContentNotFound(format!("Content not found at {}", url)))?;
+
+    let new_target_xorurl = nrs_map.resolve_for_subnames(xor.sub_names())?;
+    debug!("Resolved nrs {} to target: {}", url, new_target_xorurl);
+
+    let mut xorurl_encoder = Safe::parse_url(&new_target_xorurl)?;
+    if xorurl_encoder.path().is_empty() {
+        xorurl_encoder.set_path(xor.path());
+    } else if !xor.path().is_empty() {
+        xorurl_encoder.set_path(&format!("{}{}", xorurl_encoder.path(), xor.path()));
+    }
+
+    let xor_url = xorurl_encoder.to_string()?;
+    let nrs_url = if Safe::is_nrs(&xorurl_encoder) {
+        let mut parts = url::Url::parse(&new_target_xorurl)
+            .map_err(|_e| Error::InvalidXorUrl(format!("Could not parse url {}", url)))?;
+        parts.set_path(&xorurl_encoder.path());
+        Some(parts.into_string())
+    } else {
+        None
+    };
+
+    Ok((xor_url, nrs_url))
 }
 
 async fn retrieve_immd(

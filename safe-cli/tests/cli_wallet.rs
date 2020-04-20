@@ -431,9 +431,7 @@ fn calling_safe_wallet_create_w_bad_location() {
         "--json",
     ])
     .assert()
-    .stderr(predicate::str::contains(
-        "The location couldn't be resolved from the NRS URL provided",
-    ))
+    .stderr(predicate::str::contains("Content not found at"))
     .failure();
 }
 

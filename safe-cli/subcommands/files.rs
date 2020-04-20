@@ -335,12 +335,13 @@ pub async fn files_commander(
         FilesSubCommands::Ls { target } => {
             let target_url =
                 get_from_arg_or_stdin(target, Some("...awaiting target URl from STDIN"))?;
+            let resolved_url = safe.resolve_to_xorurl(&target_url).await?;
 
             let (version, files_map) = safe
-                .files_container_get(&target_url)
+                .files_container_get(&resolved_url)
                 .await
                 .map_err(|err| format!("Make sure the URL targets a FilesContainer.\n{}", err))?;
-            let (total, filtered_filesmap) = filter_files_map(&files_map, &target_url)?;
+            let (total, filtered_filesmap) = filter_files_map(&files_map, &resolved_url)?;
 
             if OutputFmt::Pretty == output_fmt {
                 print_files_map(&filtered_filesmap, total, version, &target_url);
@@ -374,14 +375,15 @@ async fn process_tree_command(
     output_fmt: OutputFmt,
 ) -> Result<(), String> {
     let target_url = get_from_arg_or_stdin(target, Some("...awaiting target URl from STDIN"))?;
+    let resolved_url = safe.resolve_to_xorurl(&target_url).await?;
 
     let (_version, files_map) = safe
-        .files_container_get(&target_url)
+        .files_container_get(&resolved_url)
         .await
         .map_err(|err| format!("Make sure the URL targets a FilesContainer.\n{}", err))?;
 
     let filtered_filesmap =
-        filter_files_map_by_xorurl_path(&files_map, &target_url, |urlpath, fmpath| {
+        filter_files_map_by_xorurl_path(&files_map, &resolved_url, |urlpath, fmpath| {
             // remove urlpath from translated path
             // eg, urlpath:  /project/src/module
             //      fmpath:  /project/src/module/submod/foo.rs

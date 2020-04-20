@@ -134,7 +134,11 @@ impl Safe {
     /// ```
     pub async fn files_container_get(&self, url: &str) -> Result<(u64, FilesMap)> {
         debug!("Getting files container from: {:?}", url);
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let resolved_url = self.resolve_to_xorurl(&url).await?;
+
+        debug!("resolved url is {:?}", &resolved_url);
+
+        let xorurl_encoder = XorUrlEncoder::from_url(&resolved_url)?;
 
         // Check if the URL specifies a specific version of the content or simply the latest available
         let data = match xorurl_encoder.content_version() {
