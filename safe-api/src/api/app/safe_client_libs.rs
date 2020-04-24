@@ -426,8 +426,12 @@ impl SafeApp for SafeAppScl {
         let data_length = self
             .get_current_seq_append_only_data_version(name, tag)
             .await
-            .map_err(|e| {
-                Error::NetDataError(format!("Failed to get Sequenced Append Only Data: {:?}", e))
+            .map_err(|err| match err {
+                Error::EmptyContent(_) => err,
+                _ => Error::NetDataError(format!(
+                    "Failed to get Sequenced Append Only Data: {:?}",
+                    err
+                )),
             })?;
 
         let data_entry = run(safe_app, move |client, _app_context| {
@@ -453,7 +457,7 @@ impl SafeApp for SafeAppScl {
         let safe_app: &App = self.get_safe_app()?;
         let append_only_data_address = ADataAddress::PubSeq { name, tag };
 
-        run(safe_app, move |client, _app_context| {
+        let data_returned = run(safe_app, move |client, _app_context| {
             client
                 .get_adata_indices(append_only_data_address)
                 .map_err(SafeAppError)
@@ -463,8 +467,16 @@ impl SafeApp for SafeAppScl {
                 "Failed to get Sequenced Append Only Data indices: {:?}",
                 e
             ))
-        })
-        .map(|data_returned| data_returned.entries_index() - 1)
+        })?;
+
+        if data_returned.entries_index() > 0 {
+            Ok(data_returned.entries_index() - 1)
+        } else {
+            Err(Error::EmptyContent(format!(
+                "Empty Sequenced AppendOnlyData found at Xor name {}",
+                xorname_to_hex(&name)
+            )))
+        }
     }
 
     async fn get_seq_append_only_data(

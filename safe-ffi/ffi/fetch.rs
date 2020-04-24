@@ -185,6 +185,15 @@ unsafe fn invoke_callback(
             };
             o_keys(user_data.0, &keys);
         }
+        Ok(SafeData::PublicSequence { .. }) => {
+            let ffi_result = NativeResult {
+                error_code: 0,
+                description: Some(
+                    "Sequence not supported yet to be fetched through FFI API".to_string(),
+                ),
+            };
+            o_err(user_data.0, &ffi_result.into_repr_c()?);
+        }
         Err(err) => {
             let (error_code, description) = ffi_error!(Error::from(err.clone()));
             let ffi_result = NativeResult {

@@ -63,6 +63,14 @@ pub enum SafeData {
         resolved_from: Option<NrsMapContainerInfo>,
         media_type: Option<String>,
     },
+    PublicSequence {
+        xorurl: String,
+        xorname: XorName,
+        type_tag: u64,
+        version: u64,
+        data: Vec<u8>,
+        resolved_from: Option<NrsMapContainerInfo>,
+    },
 }
 
 enum ResolutionStep {
@@ -345,6 +353,20 @@ async fn resolve_one_indirection(
             SafeDataType::PublishedImmutableData => {
                 retrieve_immd(safe, the_xor, xorurl, retrieve_data, None, range).await
             }
+            SafeDataType::PublishedSeqAppendOnlyData => {
+                let (version, data) = safe.sequence_get(&xorurl).await?;
+                debug!("Data found with v:{}, on Sequence at: {}", version, xorurl);
+                let safe_data = SafeData::PublicSequence {
+                    xorurl,
+                    xorname: the_xor.xorname(),
+                    type_tag: the_xor.type_tag(),
+                    version,
+                    data: if retrieve_data { data } else { vec![] },
+                    resolved_from: None,
+                };
+
+                Ok((ResolutionStep::Data(safe_data), None))
+            }
             other => Err(Error::ContentError(format!(
                 "Data type '{:?}' not supported yet",
                 other
@@ -475,6 +497,21 @@ fn embed_resolved_from(
             xorname,
             data,
             media_type,
+            resolved_from: Some(nrs_map_container),
+        },
+        SafeData::PublicSequence {
+            xorurl,
+            xorname,
+            type_tag,
+            version,
+            data,
+            ..
+        } => SafeData::PublicSequence {
+            xorurl,
+            xorname,
+            type_tag,
+            version,
+            data,
             resolved_from: Some(nrs_map_container),
         },
     };
@@ -810,6 +847,42 @@ mod tests {
                 content
             )))
         }
+    }
+
+    #[tokio::test]
+    async fn test_fetch_public_sequence() -> Result<()> {
+        let mut safe = new_safe_instance()?;
+        let data = b"Something super immutable";
+        let xorurl = safe.sequence_create(Some(data)).await?;
+
+        let xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
+        let content = safe.fetch(&xorurl, None).await?;
+        assert!(
+            content
+                == SafeData::PublicSequence {
+                    xorurl: xorurl.clone(),
+                    xorname: xorurl_encoder.xorname(),
+                    type_tag: xorurl_encoder.type_tag(),
+                    version: 0,
+                    data: data.to_vec(),
+                    resolved_from: None,
+                }
+        );
+
+        // let's also compare it with the result from inspecting the URL
+        let inspected_url = safe.inspect(&xorurl).await?;
+        assert!(
+            inspected_url
+                == SafeData::PublicSequence {
+                    xorurl,
+                    xorname: xorurl_encoder.xorname(),
+                    type_tag: xorurl_encoder.type_tag(),
+                    version: 0,
+                    data: vec![],
+                    resolved_from: None,
+                }
+        );
+        Ok(())
     }
 
     #[tokio::test]

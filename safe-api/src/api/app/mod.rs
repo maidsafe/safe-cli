@@ -17,6 +17,7 @@ mod nrs;
 #[cfg(not(feature = "scl-mock"))]
 mod safe_client_libs;
 mod safe_net;
+mod sequence;
 #[cfg(test)]
 mod test_helpers;
 mod xorurl_media_types;

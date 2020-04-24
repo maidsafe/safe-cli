@@ -341,7 +341,11 @@ impl SafeApp for SafeAppFake {
 
         match self.fake_vault.published_seq_append_only.get(&xorname_hex) {
             Some(seq_append_only) => {
-                let latest_index = seq_append_only.len() - 1;
+                let latest_index = if seq_append_only.is_empty() {
+                    0
+                } else {
+                    seq_append_only.len() - 1
+                };
                 let last_entry = seq_append_only.get(latest_index).ok_or_else(|| {
                     Error::EmptyContent(format!(
                         "Empty Sequenced AppendOnlyData found at Xor name {}",

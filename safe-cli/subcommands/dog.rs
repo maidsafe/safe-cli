@@ -121,6 +121,34 @@ pub async fn dog_commander(
                 println!("{}", serialise_output(&jsonv, output_fmt));
             }
         }
+        SafeData::PublicSequence {
+            xorurl,
+            xorname,
+            type_tag,
+            version,
+            resolved_from,
+            ..
+        } => {
+            if OutputFmt::Pretty == output_fmt {
+                println!("Native data type: Sequence (public)");
+                println!("Version: {}", version);
+                println!("Type tag: {}", type_tag);
+                println!("XOR name: 0x{}", xorname_to_hex(xorname));
+                println!("XOR-URL: {}", xorurl);
+                print_resolved_from(100, resolved_from);
+            } else if resolved_from.is_some() {
+                println!("{}", serialise_output(&(url, content), output_fmt));
+            } else {
+                let jsonv = serde_json::json!([
+                    url,
+                    {
+                        "data_type": "PublicSequence",
+                        "xorname": xorname_to_hex(xorname)
+                    }
+                ]);
+                println!("{}", serialise_output(&jsonv, output_fmt));
+            }
+        }
         SafeData::SafeKey {
             xorurl,
             xorname,
