@@ -10,17 +10,10 @@
 use super::common::{parse_hex, sk_from_hex};
 use crate::{Error, Result};
 use chrono::{SecondsFormat, Utc};
-use log::debug;
 use safe_core::ipc::{decode_msg, resp::AuthGranted, BootstrapConfig, IpcMsg, IpcResp};
 use safe_nd::{Coins, Error as SafeNdError, PublicKey as SafeNdPublicKey, XorName};
-use std::{
-    iter::FromIterator,
-    str::{self, FromStr},
-};
+use std::str::{self, FromStr};
 use threshold_crypto::{serde_impl::SerdeSecret, PublicKey, SecretKey, PK_SIZE};
-use url::Url;
-
-const URL_VERSION_QUERY_NAME: &str = "v=";
 
 /// The conversion from coin to raw value
 const COIN_TO_RAW_CONVERSION: u64 = 1_000_000_000;
@@ -127,57 +120,6 @@ pub fn decode_ipc_msg(ipc_msg: &str) -> Result<AuthResponseType> {
         IpcMsg::Revoked { .. } => Err(Error::AuthError("Authorisation denied".to_string())),
         other => Err(Error::AuthError(format!("{:?}", other))),
     }
-}
-
-pub fn get_subnames_host_path_and_version(
-    xorurl: &str,
-) -> Result<(Vec<String>, String, String, Option<u64>)> {
-    let parsing_url = Url::parse(&xorurl).map_err(|parse_err| {
-        Error::InvalidXorUrl(format!(
-            "Problem parsing the safe:// URL \"{}\": {}",
-            xorurl, parse_err
-        ))
-    })?;
-
-    let host_str = parsing_url
-        .host_str()
-        .unwrap_or_else(|| "Failed parsing the URL");
-    let names_vec = Vec::from_iter(host_str.split('.').map(String::from));
-    let top_level_name = &names_vec[names_vec.len() - 1];
-    let sub_names = &names_vec[0..names_vec.len() - 1];
-
-    let mut path = parsing_url.path();
-    if path == "/" {
-        path = "";
-    }
-
-    let version = match parsing_url.query() {
-        Some(query) => {
-            let items: Vec<&str> = query.split('&').collect();
-            match items.iter().find(|q| q.starts_with(URL_VERSION_QUERY_NAME)) {
-                Some(version_item) => {
-                    let version_str = version_item.replace(URL_VERSION_QUERY_NAME, "");
-                    str::parse::<u64>(&version_str).ok()
-                }
-                None => None,
-            }
-        }
-        None => None,
-    };
-
-    debug!(
-        "Data from url: sub names: {:?}, host: {}, path: {}, version: {:?}",
-        sub_names.to_vec(),
-        top_level_name.to_string(),
-        path,
-        version
-    );
-    Ok((
-        sub_names.to_vec(),
-        top_level_name.to_string(),
-        path.to_string(),
-        version,
-    ))
 }
 
 pub fn gen_timestamp_secs() -> String {

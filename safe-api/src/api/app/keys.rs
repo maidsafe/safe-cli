@@ -94,16 +94,7 @@ impl Safe {
             }
         };
 
-        let xorurl = XorUrlEncoder::encode(
-            xorname,
-            0,
-            SafeDataType::SafeKey,
-            SafeContentType::Raw,
-            None,
-            None,
-            None,
-            self.xorurl_base,
-        )?;
+        let xorurl = XorUrlEncoder::encode_safekey(xorname, self.xorurl_base)?;
         Ok((xorurl, key_pair))
     }
 
@@ -121,16 +112,7 @@ impl Safe {
         let (pk, sk) = key_pair.to_hex_key_pair()?;
         let key_pair = Some(BlsKeyPair { pk, sk });
 
-        let xorurl = XorUrlEncoder::encode(
-            xorname,
-            0,
-            SafeDataType::SafeKey,
-            SafeContentType::Raw,
-            None,
-            None,
-            None,
-            self.xorurl_base,
-        )?;
+        let xorurl = XorUrlEncoder::encode_safekey(xorname, self.xorurl_base)?;
         Ok((xorurl, key_pair))
     }
 
@@ -208,7 +190,7 @@ impl Safe {
         let (to_xorurl_encoder, _) = self.parse_and_resolve_url(to_url).await?;
         let to_xorname = if to_xorurl_encoder.content_type() == SafeContentType::Wallet {
             let (to_balance, _) = self
-                .wallet_get_default_balance(&to_xorurl_encoder.to_string()?)
+                .wallet_get_default_balance(&to_xorurl_encoder.to_string())
                 .await?;
             XorUrlEncoder::from_url(&to_balance.xorurl)?.xorname()
         } else if to_xorurl_encoder.content_type() == SafeContentType::Raw
@@ -434,8 +416,8 @@ mod tests {
             .keys_balance_from_url(&invalid_xorurl, &unwrap_key_pair(key_pair)?.sk)
             .await;
         match current_balance {
-            Err(Error::InvalidInput(msg)) => {
-                assert!(msg.contains("The location couldn't be resolved from the NRS URL provided"));
+            Err(Error::ContentNotFound(msg)) => {
+                assert!(msg.contains(&format!("Content not found at {}", invalid_xorurl)));
                 Ok(())
             }
             Err(err) => Err(Error::Unexpected(format!(
@@ -453,15 +435,17 @@ mod tests {
     async fn test_keys_test_coins_balance_wrong_location() -> Result<()> {
         let mut safe = new_safe_instance()?;
         let amount = "35312.000000000";
-        let (mut xorurl, kp) = safe.keys_create_preload_test_coins(amount).await?;
+        let (xorurl, kp) = safe.keys_create_preload_test_coins(amount).await?;
         let key_pair = unwrap_key_pair(kp)?;
 
         let current_balance = safe.keys_balance_from_url(&xorurl, &key_pair.sk).await?;
         assert_eq!(amount, current_balance);
 
-        // let's corrupt the XOR-URL right where the encoded xorname bytes are in the string
-        xorurl.replace_range(13..18, "ccccc");
-        let current_balance = safe.keys_balance_from_url(&xorurl, &key_pair.sk).await;
+        // let's use the XOR-URL of another SafeKey
+        let (other_kp_xorurl, _) = safe.keys_create_preload_test_coins("0").await?;
+        let current_balance = safe
+            .keys_balance_from_url(&other_kp_xorurl, &key_pair.sk)
+            .await;
         match current_balance {
             Err(Error::InvalidInput(msg)) => {
                 assert!(msg.contains(

@@ -9,37 +9,36 @@
 
 use super::{
     errors::Result,
-    ffi_structs::{xorurl_encoder_into_repr_c, XorNameArray, XorUrlEncoder},
-    helpers::from_c_str_to_str_option,
+    ffi_structs::{safe_url_into_repr_c, SafeUrl, XorNameArray},
+    helpers::{c_str_str_to_string_vec, from_c_str_to_str_option},
 };
 use ffi_utils::{catch_unwind_cb, FfiResult, OpaqueCtx, ReprC, FFI_RESULT_OK};
-use safe_api::xorurl::{
-    SafeContentType, SafeDataType, XorUrlBase, XorUrlEncoder as NativeXorUrlEncoder,
-};
+use safe_api::xorurl::{SafeContentType, SafeDataType, SafeUrl as NativeSafeUrl, XorUrlBase};
 use safe_nd::XorName;
 use std::{
     ffi::CString,
     os::raw::{c_char, c_void},
-    str::FromStr,
 };
 
-// TODO: Can be convertered to a struct
-
 #[no_mangle]
-pub unsafe extern "C" fn xorurl_encode(
+pub unsafe extern "C" fn safe_url_encode(
     name: *const XorNameArray,
+    nrs_name: *const c_char,
     type_tag: u64,
     data_type: u64,
     content_type: u16,
     path: *const c_char,
-    _sub_names: *const c_char, // todo: update this later
+    sub_names: *const *const c_char,
+    sub_names_len: usize,
+    query_string: *const c_char,
+    fragment: *const c_char,
     content_version: u64,
-    base_encoding: *const c_char,
+    base_encoding: u16,
     user_data: *mut c_void,
     o_cb: extern "C" fn(
         user_data: *mut c_void,
         result: *const FfiResult,
-        encoded_xor_url: *const c_char,
+        encoded_safe_url: *const c_char,
     ),
 ) {
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
@@ -47,79 +46,202 @@ pub unsafe extern "C" fn xorurl_encode(
         let xor_name = XorName(*name);
         let data_type_enum = SafeDataType::from_u64(data_type)?;
         let content_type_enum = SafeContentType::from_u16(content_type)?;
+        let nrs_name = from_c_str_to_str_option(nrs_name);
         let url_path = from_c_str_to_str_option(path);
-        let encoding_base = XorUrlBase::from_str(&String::clone_from_repr_c(base_encoding)?)?;
-        let encoded_xor_url = NativeXorUrlEncoder::encode(
+        let query_string = from_c_str_to_str_option(query_string);
+        let fragment = from_c_str_to_str_option(fragment);
+        let sub_names = if sub_names_len == 0 {
+            None
+        } else {
+            Some(c_str_str_to_string_vec(sub_names, sub_names_len)?)
+        };
+        let encoding_base = XorUrlBase::from_u16(base_encoding)?;
+        let encoded_safe_url = NativeSafeUrl::encode(
             xor_name,
+            nrs_name,
             type_tag,
             data_type_enum,
             content_type_enum,
             url_path,
-            Some(vec![]),
+            sub_names,
+            query_string,
+            fragment,
             Some(content_version),
             encoding_base,
-        )?; //todo: update sub_names parameter
-        let encoded_string = CString::new(encoded_xor_url)?;
+        )?;
+        let encoded_string = CString::new(encoded_safe_url)?;
         o_cb(user_data.0, FFI_RESULT_OK, encoded_string.as_ptr());
         Ok(())
     })
 }
 
-// TODO: Can be convertered to a struct
-
 #[no_mangle]
-pub unsafe extern "C" fn xorurl_encoder(
+pub unsafe extern "C" fn new_safe_url(
     name: *const XorNameArray,
+    nrs_name: *const c_char,
     type_tag: u64,
     data_type: u64,
     content_type: u16,
     path: *const c_char,
-    _sub_names: *const c_char, // todo: update this later
+    sub_names: *const *const c_char,
+    sub_names_len: usize,
+    query_string: *const c_char,
+    fragment: *const c_char,
     content_version: u64,
     user_data: *mut c_void,
-    o_cb: extern "C" fn(
-        user_data: *mut c_void,
-        result: *const FfiResult,
-        xor_url_encoder: *const XorUrlEncoder,
-    ),
+    o_cb: extern "C" fn(user_data: *mut c_void, result: *const FfiResult, safe_url: *const SafeUrl),
 ) {
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
         let user_data = OpaqueCtx(user_data);
+        let nrs_name = from_c_str_to_str_option(nrs_name);
         let xor_name = XorName(*name);
         let data_type_enum = SafeDataType::from_u64(data_type)?;
         let content_type_enum = SafeContentType::from_u16(content_type)?;
         let url_path = from_c_str_to_str_option(path);
-        let encoder = NativeXorUrlEncoder::new(
+        let query_string = from_c_str_to_str_option(query_string);
+        let fragment = from_c_str_to_str_option(fragment);
+        let sub_names = if sub_names_len == 0 {
+            None
+        } else {
+            Some(c_str_str_to_string_vec(sub_names, sub_names_len)?)
+        };
+        let encoder = NativeSafeUrl::new(
             xor_name,
+            nrs_name,
             type_tag,
             data_type_enum,
             content_type_enum,
             url_path,
-            Some(vec![]),
+            sub_names,
+            query_string,
+            fragment,
             Some(content_version),
-        )?; //todo: update sub_names parameter
-        let ffi_encoder = xorurl_encoder_into_repr_c(encoder)?;
+        )?;
+        let ffi_encoder = safe_url_into_repr_c(encoder)?;
         o_cb(user_data.0, FFI_RESULT_OK, &ffi_encoder);
         Ok(())
     })
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn xorurl_encoder_from_url(
-    xor_url: *const c_char,
+pub unsafe extern "C" fn safe_url_from_url(
+    safe_url: *const c_char,
+    user_data: *mut c_void,
+    o_cb: extern "C" fn(user_data: *mut c_void, result: *const FfiResult, safe_url: *const SafeUrl),
+) {
+    catch_unwind_cb(user_data, o_cb, || -> Result<()> {
+        let user_data = OpaqueCtx(user_data);
+        let safe_url_str = String::clone_from_repr_c(safe_url)?;
+        let safe_url = NativeSafeUrl::from_url(&safe_url_str)?;
+        let ffi_encoder = safe_url_into_repr_c(safe_url)?;
+        o_cb(user_data.0, FFI_RESULT_OK, &ffi_encoder);
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn encode_safekey(
+    name: *const XorNameArray,
+    base_encoding: u16,
     user_data: *mut c_void,
     o_cb: extern "C" fn(
         user_data: *mut c_void,
         result: *const FfiResult,
-        xor_url_encoder: *const XorUrlEncoder,
+        encoded_safe_url: *const c_char,
     ),
 ) {
     catch_unwind_cb(user_data, o_cb, || -> Result<()> {
         let user_data = OpaqueCtx(user_data);
-        let xor_url = String::clone_from_repr_c(xor_url)?;
-        let xor_url_encoder = NativeXorUrlEncoder::from_url(&xor_url)?;
-        let ffi_encoder = xorurl_encoder_into_repr_c(xor_url_encoder)?;
-        o_cb(user_data.0, FFI_RESULT_OK, &ffi_encoder);
+        let xor_name = XorName(*name);
+        let encoding_base = XorUrlBase::from_u16(base_encoding)?;
+        let encoded_safe_url = NativeSafeUrl::encode_safekey(xor_name, encoding_base)?;
+        let encoded_string = CString::new(encoded_safe_url)?;
+        o_cb(user_data.0, FFI_RESULT_OK, encoded_string.as_ptr());
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn encode_immutable_data(
+    name: *const XorNameArray,
+    content_type: u16,
+    base_encoding: u16,
+    user_data: *mut c_void,
+    o_cb: extern "C" fn(
+        user_data: *mut c_void,
+        result: *const FfiResult,
+        encoded_safe_url: *const c_char,
+    ),
+) {
+    catch_unwind_cb(user_data, o_cb, || -> Result<()> {
+        let user_data = OpaqueCtx(user_data);
+        let xor_name = XorName(*name);
+        let content_type_enum = SafeContentType::from_u16(content_type)?;
+        let encoding_base = XorUrlBase::from_u16(base_encoding)?;
+        let encoded_safe_url =
+            NativeSafeUrl::encode_immutable_data(xor_name, content_type_enum, encoding_base)?;
+        let encoded_string = CString::new(encoded_safe_url)?;
+        o_cb(user_data.0, FFI_RESULT_OK, encoded_string.as_ptr());
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn encode_mutable_data(
+    name: *const XorNameArray,
+    type_tag: u64,
+    content_type: u16,
+    base_encoding: u16,
+    user_data: *mut c_void,
+    o_cb: extern "C" fn(
+        user_data: *mut c_void,
+        result: *const FfiResult,
+        encoded_safe_url: *const c_char,
+    ),
+) {
+    catch_unwind_cb(user_data, o_cb, || -> Result<()> {
+        let user_data = OpaqueCtx(user_data);
+        let xor_name = XorName(*name);
+        let content_type_enum = SafeContentType::from_u16(content_type)?;
+        let encoding_base = XorUrlBase::from_u16(base_encoding)?;
+        let encoded_safe_url = NativeSafeUrl::encode_mutable_data(
+            xor_name,
+            type_tag,
+            content_type_enum,
+            encoding_base,
+        )?;
+        let encoded_string = CString::new(encoded_safe_url)?;
+        o_cb(user_data.0, FFI_RESULT_OK, encoded_string.as_ptr());
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn encode_append_only_data(
+    name: *const XorNameArray,
+    type_tag: u64,
+    content_type: u16,
+    base_encoding: u16,
+    user_data: *mut c_void,
+    o_cb: extern "C" fn(
+        user_data: *mut c_void,
+        result: *const FfiResult,
+        encoded_safe_url: *const c_char,
+    ),
+) {
+    catch_unwind_cb(user_data, o_cb, || -> Result<()> {
+        let user_data = OpaqueCtx(user_data);
+        let xor_name = XorName(*name);
+        let content_type_enum = SafeContentType::from_u16(content_type)?;
+        let encoding_base = XorUrlBase::from_u16(base_encoding)?;
+        let encoded_safe_url = NativeSafeUrl::encode_append_only_data(
+            xor_name,
+            type_tag,
+            content_type_enum,
+            encoding_base,
+        )?;
+        let encoded_string = CString::new(encoded_safe_url)?;
+        o_cb(user_data.0, FFI_RESULT_OK, encoded_string.as_ptr());
         Ok(())
     })
 }

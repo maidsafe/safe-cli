@@ -7,21 +7,20 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-mod common;
+extern crate safe_cmd_test_utilities;
 
 #[macro_use]
 extern crate duct;
 
 use assert_cmd::prelude::*;
-use common::{
-    get_bin_location, get_random_nrs_string, parse_nrs_create_output, upload_test_folder, CLI,
-    SAFE_PROTOCOL,
-};
 use predicates::prelude::*;
 use safe_api::{
     fetch::{SafeContentType, SafeDataType},
     xorurl::{XorUrlBase, XorUrlEncoder},
     XorName,
+};
+use safe_cmd_test_utilities::{
+    get_random_nrs_string, parse_nrs_create_output, upload_test_folder, CLI, SAFE_PROTOCOL,
 };
 use std::process::Command;
 use unwrap::unwrap;
@@ -32,9 +31,12 @@ fn gen_fake_target() -> String {
     let xorname = XorName(*b"12345678901234567890123456789012");
     unwrap!(XorUrlEncoder::encode(
         xorname,
+        None,
         0x00a5_3cde,
         SafeDataType::PublishedImmutableData,
         SafeContentType::Raw,
+        None,
+        None,
         None,
         None,
         Some(5),
@@ -62,7 +64,7 @@ fn calling_safe_nrs_twice_w_name_fails() {
     let fake_target = gen_fake_target();
 
     let _nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name,
@@ -88,14 +90,14 @@ fn calling_safe_nrs_put_folder_and_fetch() {
 
     let (container_xorurl, _map) = upload_test_folder();
 
-    let cat_of_filesmap = cmd!(get_bin_location(), "cat", &container_xorurl)
+    let cat_of_filesmap = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &container_xorurl)
         .read()
         .unwrap();
 
     assert!(cat_of_filesmap.contains("safe://"));
 
     let nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name,
@@ -109,7 +111,7 @@ fn calling_safe_nrs_put_folder_and_fetch() {
     let (nrs_map_xorurl, _change_map) = parse_nrs_create_output(&nrs_creation);
 
     assert!(nrs_map_xorurl.contains("safe://"));
-    let cat_of_nrs_map_url = cmd!(get_bin_location(), "cat", &nrs_map_xorurl)
+    let cat_of_nrs_map_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &nrs_map_xorurl)
         .read()
         .unwrap();
 
@@ -123,7 +125,7 @@ fn calling_safe_nrs_put_folder_and_fetch() {
     assert!(nrs_creation.contains(&test_name));
 
     let another_file = format!("{}/another.md", &test_name);
-    let cat_of_new_url = cmd!(get_bin_location(), "cat", &another_file)
+    let cat_of_new_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &another_file)
         .read()
         .unwrap();
 
@@ -137,9 +139,9 @@ fn calling_safe_nrs_put_no_top_default_fetch() {
     let (container_xorurl, _map) = upload_test_folder();
     let mut xorurl_encoder = unwrap!(XorUrlEncoder::from_url(&container_xorurl));
     xorurl_encoder.set_path("/test.md");
-    let link = unwrap!(xorurl_encoder.to_string());
+    let link = xorurl_encoder.to_string();
     let _nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name,
@@ -150,7 +152,9 @@ fn calling_safe_nrs_put_no_top_default_fetch() {
     .read()
     .unwrap();
 
-    let cat_of_new_url = cmd!(get_bin_location(), "cat", &test_name).read().unwrap();
+    let cat_of_new_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &test_name)
+        .read()
+        .unwrap();
     assert_eq!(cat_of_new_url, "hello tests!");
 }
 
@@ -161,13 +165,13 @@ fn calling_safe_nrs_put_folder_and_fetch_from_subname() {
     let test_name = get_random_nrs_string();
     let test_name_w_sub = format!("safe://subname.{}", &test_name);
 
-    let cat_of_filesmap = cmd!(get_bin_location(), "cat", &container_xorurl)
+    let cat_of_filesmap = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &container_xorurl)
         .read()
         .unwrap();
     assert!(cat_of_filesmap.contains("safe://"));
 
     let nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name_w_sub,
@@ -181,7 +185,7 @@ fn calling_safe_nrs_put_folder_and_fetch_from_subname() {
     let (nrs_map_xorurl, _change_map) = parse_nrs_create_output(&nrs_creation);
 
     assert!(nrs_map_xorurl.contains("safe://"));
-    let cat_of_nrs_map_url = cmd!(get_bin_location(), "cat", &nrs_map_xorurl)
+    let cat_of_nrs_map_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &nrs_map_xorurl)
         .read()
         .unwrap();
 
@@ -196,14 +200,14 @@ fn calling_safe_nrs_put_folder_and_fetch_from_subname() {
     assert!(nrs_creation.contains(&test_name_w_sub));
 
     let another_file = format!("{}/another.md", &test_name_w_sub);
-    let cat_of_new_url = cmd!(get_bin_location(), "cat", &another_file)
+    let cat_of_new_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &another_file)
         .read()
         .unwrap();
 
     assert_eq!(cat_of_new_url, "exists");
 
     let via_default_also = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "cat",
         format!("safe://{}/another.md", &test_name)
     )
@@ -220,13 +224,13 @@ fn calling_safe_nrs_put_and_retrieve_many_subnames() {
     let test_name = get_random_nrs_string();
     let test_name_w_sub = format!("safe://a.b.{}", &test_name);
 
-    let cat_of_filesmap = cmd!(get_bin_location(), "cat", &container_xorurl)
+    let cat_of_filesmap = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &container_xorurl)
         .read()
         .unwrap();
     assert!(cat_of_filesmap.contains("safe://"));
 
     let nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name_w_sub,
@@ -240,7 +244,7 @@ fn calling_safe_nrs_put_and_retrieve_many_subnames() {
     let (nrs_map_xorurl, _change_map) = parse_nrs_create_output(&nrs_creation);
 
     assert!(nrs_map_xorurl.contains("safe://"));
-    let cat_of_nrs_map_url = cmd!(get_bin_location(), "cat", &nrs_map_xorurl)
+    let cat_of_nrs_map_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &nrs_map_xorurl)
         .read()
         .unwrap();
 
@@ -255,14 +259,14 @@ fn calling_safe_nrs_put_and_retrieve_many_subnames() {
     assert!(nrs_creation.contains(&test_name_w_sub));
 
     let another_file = format!("{}/another.md", &test_name_w_sub);
-    let cat_of_new_url = cmd!(get_bin_location(), "cat", &another_file)
+    let cat_of_new_url = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &another_file)
         .read()
         .unwrap();
 
     assert_eq!(cat_of_new_url, "exists");
 
     let via_default_from_root = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "cat",
         format!("safe://{}/another.md", &test_name)
     )
@@ -283,14 +287,14 @@ fn calling_safe_nrs_put_and_add_new_subnames_set_default_and_retrieve() {
     let (_a_sign, another_md_xor) = &file_map["../testdata/another.md"];
     let (_t_sign, test_md_xor) = &file_map["../testdata/test.md"];
 
-    let cat_of_another_raw = cmd!(get_bin_location(), "cat", &another_md_xor)
+    let cat_of_another_raw = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &another_md_xor)
         .read()
         .unwrap();
 
     assert_eq!(cat_of_another_raw, "exists");
 
     let _file_one_nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name_w_sub,
@@ -301,20 +305,24 @@ fn calling_safe_nrs_put_and_add_new_subnames_set_default_and_retrieve() {
     .read()
     .unwrap();
 
-    let cat_of_sub_one = cmd!(get_bin_location(), "cat", &test_name_w_sub)
+    let cat_of_sub_one = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &test_name_w_sub)
         .read()
         .unwrap();
 
     assert_eq!(cat_of_sub_one, "exists");
 
-    let first_default = cmd!(get_bin_location(), "cat", format!("safe://{}", test_name))
-        .read()
-        .unwrap();
+    let first_default = cmd!(
+        env!("CARGO_BIN_EXE_safe"),
+        "cat",
+        format!("safe://{}", test_name)
+    )
+    .read()
+    .unwrap();
 
     assert_eq!(first_default, "exists");
 
     let _new_nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "add",
         &test_name_w_new_sub,
@@ -326,15 +334,19 @@ fn calling_safe_nrs_put_and_add_new_subnames_set_default_and_retrieve() {
     .read()
     .unwrap();
 
-    let new_nrs_creation_cat = cmd!(get_bin_location(), "cat", &test_name_w_new_sub)
+    let new_nrs_creation_cat = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &test_name_w_new_sub)
         .read()
         .unwrap();
 
     assert_eq!(new_nrs_creation_cat, "hello tests!");
 
-    let new_default = cmd!(get_bin_location(), "cat", format!("safe://{}", test_name))
-        .read()
-        .unwrap();
+    let new_default = cmd!(
+        env!("CARGO_BIN_EXE_safe"),
+        "cat",
+        format!("safe://{}", test_name)
+    )
+    .read()
+    .unwrap();
 
     assert_eq!(new_default, "hello tests!");
 }
@@ -350,14 +362,14 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_retrieve() {
     let (_a_sign, another_md_xor) = &file_map["../testdata/another.md"];
     let (_t_sign, test_md_xor) = &file_map["../testdata/test.md"];
 
-    let cat_of_another_raw = cmd!(get_bin_location(), "cat", &another_md_xor)
+    let cat_of_another_raw = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &another_md_xor)
         .read()
         .unwrap();
 
     assert_eq!(cat_of_another_raw, "exists");
 
     let _file_one_nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name_w_sub,
@@ -369,7 +381,7 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_retrieve() {
     .unwrap();
 
     let _new_nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "add",
         &test_name_w_new_sub,
@@ -382,7 +394,7 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_retrieve() {
     .unwrap();
 
     let _remove_one_nrs = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "remove",
         &test_name_w_sub,
@@ -391,15 +403,19 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_retrieve() {
     .read()
     .unwrap();
 
-    let new_nrs_creation_cat = cmd!(get_bin_location(), "cat", &test_name_w_new_sub)
+    let new_nrs_creation_cat = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &test_name_w_new_sub)
         .read()
         .unwrap();
 
     assert_eq!(new_nrs_creation_cat, "hello tests!");
 
-    let new_default = cmd!(get_bin_location(), "cat", format!("safe://{}", test_name))
-        .read()
-        .unwrap();
+    let new_default = cmd!(
+        env!("CARGO_BIN_EXE_safe"),
+        "cat",
+        format!("safe://{}", test_name)
+    )
+    .read()
+    .unwrap();
 
     assert_eq!(new_default, "hello tests!");
 }
@@ -415,14 +431,14 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_so_fail_to_retrieve(
     let (_a_sign, another_md_xor) = &file_map["../testdata/another.md"];
     let (_t_sign, test_md_xor) = &file_map["../testdata/test.md"];
 
-    let cat_of_another_raw = cmd!(get_bin_location(), "cat", &another_md_xor)
+    let cat_of_another_raw = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &another_md_xor)
         .read()
         .unwrap();
 
     assert_eq!(cat_of_another_raw, "exists");
 
     let _file_one_nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "create",
         &test_name_w_sub,
@@ -434,7 +450,7 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_so_fail_to_retrieve(
     .unwrap();
 
     let _new_nrs_creation = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "add",
         &test_name_w_new_sub,
@@ -445,20 +461,24 @@ fn calling_safe_nrs_put_and_add_new_subnames_remove_one_and_so_fail_to_retrieve(
     .read()
     .unwrap();
 
-    let new_nrs_creation_cat = cmd!(get_bin_location(), "cat", &test_name_w_new_sub)
+    let new_nrs_creation_cat = cmd!(env!("CARGO_BIN_EXE_safe"), "cat", &test_name_w_new_sub)
         .read()
         .unwrap();
 
     assert_eq!(new_nrs_creation_cat, "hello tests!");
 
-    let safe_default = cmd!(get_bin_location(), "cat", format!("safe://{}", test_name))
-        .read()
-        .unwrap();
+    let safe_default = cmd!(
+        env!("CARGO_BIN_EXE_safe"),
+        "cat",
+        format!("safe://{}", test_name)
+    )
+    .read()
+    .unwrap();
 
     assert_eq!(safe_default, "exists");
 
     let remove_one_nrs = cmd!(
-        get_bin_location(),
+        env!("CARGO_BIN_EXE_safe"),
         "nrs",
         "remove",
         &test_name_w_sub,

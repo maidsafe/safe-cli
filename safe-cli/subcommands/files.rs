@@ -8,6 +8,7 @@
 // Software.
 
 use super::{
+    files_get::{process_get_command, FileExistsAction, ProgressIndicator},
     helpers::{
         gen_processed_files_table, get_from_arg_or_stdin, get_from_stdin, if_tty, notice_dry_run,
         parse_stdin_arg, pluralize, serialise_output,
@@ -15,15 +16,16 @@ use super::{
     OutputFmt,
 };
 use ansi_term::Colour;
+use log::debug;
 use prettytable::{format::FormatBuilder, Table};
 use safe_api::{
+    fetch::SafeData,
     files::{FilesMap, ProcessedFiles},
     xorurl::{XorUrl, XorUrlEncoder},
     Safe,
 };
 use serde::Serialize;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use structopt::StructOpt;
 
 type FileDetails = BTreeMap<String, String>;
@@ -100,6 +102,22 @@ pub enum FilesSubCommands {
         /// Recursively upload folders and files found in the source location
         #[structopt(short = "r", long = "recursive")]
         recursive: bool,
+    },
+    /// Get a file or folder from the SAFE Network
+    Get {
+        /// The target FilesContainer to retrieve from, optionally including path to directory or file within
+        source: String,
+        /// The local destination path for the retrieved files and folders (default is '.')
+        dest: Option<String>,
+        /// How to handle pre-existing files.
+        #[structopt(short = "e", long = "exists", possible_values = &["ask", "preserve", "overwrite"], default_value="ask")]
+        exists: FileExistsAction,
+        /// How to display progress.
+        #[structopt(short = "i", long = "progress", possible_values = &["bars", "text", "none"], default_value="bars")]
+        progress: ProgressIndicator,
+        /// Preserves modification times, access times, and modes from the original file
+        #[structopt(short = "p", long = "preserve")]
+        preserve: bool,
     },
     #[structopt(name = "sync")]
     /// Sync files to the SAFE Network
@@ -234,7 +252,7 @@ pub async fn files_commander(
                         Ok(mut xorurl_encoder) => {
                             xorurl_encoder.set_content_version(Some(version));
                             xorurl_encoder.set_path("");
-                            xorurl_encoder.to_string()?
+                            xorurl_encoder.to_string()
                         }
                         Err(_) => target,
                     };
@@ -337,6 +355,13 @@ pub async fn files_commander(
         FilesSubCommands::Tree { target, details } => {
             process_tree_command(safe, target, details, output_fmt).await
         }
+        FilesSubCommands::Get {
+            source,
+            dest,
+            exists,
+            progress,
+            preserve,
+        } => process_get_command(safe, source, dest, exists, progress, preserve, output_fmt).await,
     }
 }
 
@@ -349,19 +374,18 @@ async fn process_tree_command(
 ) -> Result<(), String> {
     let target_url = get_from_arg_or_stdin(target, Some("...awaiting target URl from STDIN"))?;
 
-    let (_version, files_map) = safe
-        .files_container_get(&target_url)
-        .await
-        .map_err(|err| format!("Make sure the URL targets a FilesContainer.\n{}", err))?;
-
-    let filtered_filesmap = filter_files_map_by_xorurl_path(&files_map, &target_url)?;
+    debug!("Getting files in container {:?}", target_url);
+    let files_map = match safe.fetch(&target_url, None).await? {
+        SafeData::FilesContainer { files_map, .. } => files_map,
+        _other_type => return Err("Make sure the URL targets a FilesContainer.".to_string()),
+    };
 
     // Create a top/root node representing `target_url`.
     let mut top = FileTreeNode::new(&target_url, FileTreeNodeType::Directory, Option::None);
     // Transform flat list in `files_map` to a hierarchy in `top`
     let mut files: u64 = 0;
     let mut dirs: u64 = 0;
-    for (name, file_details) in filtered_filesmap.iter() {
+    for (name, file_details) in files_map.iter() {
         let path_parts: Vec<String> = name
             .to_string()
             .trim_matches('/')
@@ -395,7 +419,7 @@ fn print_serialized_output(
     let url = match XorUrlEncoder::from_url(&xorurl) {
         Ok(mut xorurl_encoder) => {
             xorurl_encoder.set_content_version(Some(version));
-            xorurl_encoder.to_string()?
+            xorurl_encoder.to_string()
         }
         Err(_) => xorurl,
     };
@@ -407,6 +431,7 @@ fn print_serialized_output(
 fn output_processed_files_list(
     output_fmt: OutputFmt,
     processed_files: ProcessedFiles,
+
     version: u64,
     target_url: String,
 ) -> Result<(), String> {
@@ -417,7 +442,7 @@ fn output_processed_files_list(
                 Ok(mut xorurl_encoder) => {
                     xorurl_encoder.set_content_version(Some(version));
                     xorurl_encoder.set_path("");
-                    xorurl_encoder.to_string()?
+                    xorurl_encoder.to_string()
                 }
                 Err(_) => target_url,
             };
@@ -667,47 +692,15 @@ fn print_files_map(files_map: &FilesMap, total_files: u64, version: u64, target_
     table.printstd();
 }
 
-// filters out file items not belonging to the xorurl path
-// note: maybe should be moved into api/app/files.rs
-//       and optionally called by files_container_get()
-//       or make a files_container_get_matching() API.
-fn filter_files_map_by_xorurl_path(
-    files_map: &FilesMap,
-    target_url: &str,
-) -> Result<FilesMap, String> {
-    let xorurl_encoder = Safe::parse_url(target_url)?;
-    let path = xorurl_encoder.path();
-
-    Ok(filter_files_map_by_path(files_map, path))
-}
-
-// filters out file items not belonging to the path
-// note: maybe should be moved into api/app/files.rs
-fn filter_files_map_by_path(files_map: &FilesMap, path: &str) -> FilesMap {
-    let mut filtered_filesmap = FilesMap::default();
-
-    files_map.iter().for_each(|(filepath, fileitem)| {
-        if filepath
-            .trim_matches('/')
-            .starts_with(&path.trim_matches('/'))
-        {
-            let mut relative_path = filepath.clone();
-            relative_path.replace_range(..path.len(), "");
-            filtered_filesmap.insert(relative_path, fileitem.clone());
-        }
-    });
-    filtered_filesmap
-}
-
 fn filter_files_map(files_map: &FilesMap, target_url: &str) -> Result<(u64, FilesMap), String> {
     let mut filtered_filesmap = FilesMap::default();
     let mut xorurl_encoder = Safe::parse_url(target_url)?;
-    let path = xorurl_encoder.path();
+    let path = xorurl_encoder.path_decoded()?;
 
     let folder_path = if !path.ends_with('/') {
         format!("{}/", path)
     } else {
-        path.to_string()
+        path
     };
 
     let mut total = 0;
@@ -739,9 +732,7 @@ fn filter_files_map(files_map: &FilesMap, target_url: &str) -> Result<(u64, File
                             // then set link to xorurl with path current subfolder
                             let subfolder_path = format!("{}{}", folder_path, subdirs[0]);
                             xorurl_encoder.set_path(&subfolder_path);
-                            let link = xorurl_encoder
-                                .to_string()
-                                .unwrap_or_else(|_| subfolder_path);
+                            let link = xorurl_encoder.to_string();
                             fileitem.insert("link".to_string(), link);
                             fileitem.insert("type".to_string(), "".to_string());
                         }

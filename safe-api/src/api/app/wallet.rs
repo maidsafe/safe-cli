@@ -45,14 +45,10 @@ impl Safe {
             .put_seq_mutable_data(None, WALLET_TYPE_TAG, None)
             .await?;
 
-        XorUrlEncoder::encode(
+        XorUrlEncoder::encode_mutable_data(
             xorname,
             WALLET_TYPE_TAG,
-            SafeDataType::SeqMutableData,
             SafeContentType::Wallet,
-            None,
-            None,
-            None,
             self.xorurl_base,
         )
     }
@@ -69,9 +65,12 @@ impl Safe {
         let xorname = xorname_from_pk(key_pair.pk);
         let xorurl = XorUrlEncoder::encode(
             xorname,
+            None,
             0,
             SafeDataType::SafeKey,
             SafeContentType::Raw,
+            None,
+            None,
             None,
             None,
             None,
@@ -388,11 +387,19 @@ impl Safe {
 
     pub async fn wallet_get(&self, url: &str) -> Result<WalletSpendableBalances> {
         let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        self.fetch_wallet(&xorurl_encoder).await
+    }
+
+    /// Fetch a Wallet from a XorUrlEncoder without performing any type of URL resolution
+    pub(crate) async fn fetch_wallet(
+        &self,
+        xorurl_encoder: &XorUrlEncoder,
+    ) -> Result<WalletSpendableBalances> {
         gen_wallet_spendable_balances_list(
             &self,
             xorurl_encoder.xorname(),
             xorurl_encoder.type_tag(),
-            url,
+            &xorurl_encoder.to_string(),
         )
         .await
     }
@@ -1045,7 +1052,7 @@ mod tests {
         // test fail to transfer more than current balance at 'from-firstbaance'
         let mut from_wallet_spendable_balance = XorUrlEncoder::from_url(&from_wallet_xorurl)?;
         from_wallet_spendable_balance.set_path("from-second-balance");
-        let from_spendable_balance = from_wallet_spendable_balance.to_string()?;
+        let from_spendable_balance = from_wallet_spendable_balance.to_string();
         match safe
             .wallet_transfer(
                 "200.6",
@@ -1144,7 +1151,7 @@ mod tests {
         // test successful transfer to 'to-second-balance'
         let mut to_wallet_spendable_balance = XorUrlEncoder::from_url(&to_wallet_xorurl)?;
         to_wallet_spendable_balance.set_path("to-second-balance");
-        let to_spendable_balance = to_wallet_spendable_balance.to_string()?;
+        let to_spendable_balance = to_wallet_spendable_balance.to_string();
         match safe
             .wallet_transfer(
                 "100.5",

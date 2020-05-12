@@ -7,10 +7,9 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use super::{errors::Result, helpers::from_c_str_to_str_option};
-use ffi_utils::{vec_from_raw_parts, vec_into_raw_parts, ReprC};
+use super::{errors::Result, helpers::string_vec_to_c_str_str};
+use ffi_utils::{vec_from_raw_parts, vec_into_raw_parts};
 use safe_api::{
-    fetch::NrsMapContainerInfo as NativeNrsMapContainerInfo,
     files::{
         FileItem as NativeFileItem, FilesMap as NativeFilesMap,
         ProcessedFiles as NativeProcessedFiles,
@@ -20,10 +19,10 @@ use safe_api::{
         WalletSpendableBalance as NativeWalletSpendableBalance,
         WalletSpendableBalances as NativeWalletSpendableBalances,
     },
-    xorurl::{SafeContentType, SafeDataType, XorUrlEncoder as NativeXorUrlEncoder},
+    xorurl::SafeUrl as NativeSafeUrl,
     BlsKeyPair as NativeBlsKeyPair, ProcessedEntries as NativeProcessedEntries,
 };
-use safe_nd::{XorName, XOR_NAME_LEN};
+use safe_nd::XOR_NAME_LEN;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
@@ -62,7 +61,7 @@ pub fn bls_key_pair_into_repr_c(key_pair: &NativeBlsKeyPair) -> Result<BlsKeyPai
 pub struct SafeKey {
     pub xorurl: *const c_char,
     pub xorname: XorNameArray,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const c_char,
 }
 
 impl Drop for SafeKey {
@@ -70,6 +69,10 @@ impl Drop for SafeKey {
         unsafe {
             if !self.xorurl.is_null() {
                 let _ = CString::from_raw(self.xorurl as *mut _);
+            }
+
+            if !self.resolved_from.is_null() {
+                let _ = CString::from_raw(self.resolved_from as *mut _);
             }
         }
     }
@@ -82,7 +85,7 @@ pub struct Wallet {
     pub type_tag: u64,
     pub balances: WalletSpendableBalances,
     pub data_type: u64,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const c_char,
 }
 
 impl Drop for Wallet {
@@ -90,6 +93,10 @@ impl Drop for Wallet {
         unsafe {
             if !self.xorurl.is_null() {
                 let _ = CString::from_raw(self.xorurl as *mut _);
+            }
+
+            if !self.resolved_from.is_null() {
+                let _ = CString::from_raw(self.resolved_from as *mut _);
             }
         }
     }
@@ -103,7 +110,7 @@ pub struct FilesContainer {
     pub version: u64,
     pub files_map: FilesMap,
     pub data_type: u64,
-    pub resolved_from: NrsMapContainerInfo,
+    pub resolved_from: *const c_char,
 }
 
 impl Drop for FilesContainer {
@@ -111,6 +118,10 @@ impl Drop for FilesContainer {
         unsafe {
             if !self.xorurl.is_null() {
                 let _ = CString::from_raw(self.xorurl as *mut _);
+            }
+
+            if !self.resolved_from.is_null() {
+                let _ = CString::from_raw(self.resolved_from as *mut _);
             }
         }
     }
@@ -122,8 +133,9 @@ pub struct PublishedImmutableData {
     pub xorname: XorNameArray,
     pub data: *const u8,
     pub data_len: usize,
-    pub resolved_from: NrsMapContainerInfo,
     pub media_type: *const c_char,
+    pub metadata: *const c_char,
+    pub resolved_from: *const c_char,
 }
 
 impl Drop for PublishedImmutableData {
@@ -137,93 +149,131 @@ impl Drop for PublishedImmutableData {
                 let _ = CString::from_raw(self.media_type as *mut _);
             }
 
+            if !self.metadata.is_null() {
+                let _ = CString::from_raw(self.metadata as *mut _);
+            }
+
+            if !self.resolved_from.is_null() {
+                let _ = CString::from_raw(self.resolved_from as *mut _);
+            }
+
             let _ = vec_from_raw_parts(self.data as *mut u8, self.data_len);
         }
     }
 }
 
 #[repr(C)]
-pub struct XorUrlEncoder {
-    pub encoding_version: u64,
+pub struct NrsMapContainer {
+    pub public_name: *const c_char,
+    pub xorurl: *const c_char,
     pub xorname: XorNameArray,
     pub type_tag: u64,
+    pub version: u64,
+    pub nrs_map: *const c_char,
     pub data_type: u64,
-    pub content_type: u16,
-    pub path: *const c_char,
-    pub sub_names: *const c_char,
-    // pub sub_names: *const *const c_char, // Todo: update to String Vec
-    // pub sub_names_len: usize,
-    pub content_version: u64,
+    pub resolved_from: *const c_char,
 }
 
-impl Drop for XorUrlEncoder {
+impl Drop for NrsMapContainer {
     fn drop(&mut self) {
         unsafe {
-            if !self.path.is_null() {
-                let _ = CString::from_raw(self.path as *mut _);
+            if !self.public_name.is_null() {
+                let _ = CString::from_raw(self.public_name as *mut _);
             }
 
-            if !self.sub_names.is_null() {
-                let _ = CString::from_raw(self.sub_names as *mut _);
+            if !self.xorurl.is_null() {
+                let _ = CString::from_raw(self.xorurl as *mut _);
+            }
+
+            if !self.nrs_map.is_null() {
+                let _ = CString::from_raw(self.nrs_map as *mut _);
+            }
+
+            if !self.resolved_from.is_null() {
+                let _ = CString::from_raw(self.resolved_from as *mut _);
             }
         }
     }
 }
 
-impl XorUrlEncoder {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            encoding_version: 0,
-            xorname: [0; 32],
-            type_tag: 0,
-            data_type: 0,
-            content_type: 0,
-            path: CString::new(String::new())?.into_raw(),
-            sub_names: CString::new(String::new())?.into_raw(),
-            content_version: 0,
-        })
+#[repr(C)]
+#[derive(Debug)]
+pub struct SafeUrl {
+    pub encoding_version: u64,
+    pub xorname: XorNameArray,
+    pub public_name: *const c_char,
+    pub top_name: *const c_char,
+    pub sub_names: *const c_char,
+    pub sub_names_list: *const *const c_char,
+    pub sub_names_list_len: usize,
+    pub type_tag: u64,
+    pub data_type: u64,
+    pub content_type: u16,
+    pub path: *const c_char,
+    pub query_string: *const c_char,
+    pub fragment: *const c_char,
+    pub content_version: u64,
+    pub safeurl_type: u16,
+}
+
+impl Drop for SafeUrl {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.public_name.is_null() {
+                let _ = CString::from_raw(self.public_name as *mut _);
+            }
+
+            if !self.top_name.is_null() {
+                let _ = CString::from_raw(self.top_name as *mut _);
+            }
+
+            if !self.sub_names.is_null() {
+                let _ = CString::from_raw(self.sub_names as *mut _);
+            }
+
+            if !self.path.is_null() {
+                let _ = CString::from_raw(self.path as *mut _);
+            }
+
+            if !self.query_string.is_null() {
+                let _ = CString::from_raw(self.query_string as *mut _);
+            }
+
+            if !self.fragment.is_null() {
+                let _ = CString::from_raw(self.fragment as *mut _);
+            }
+
+            let _ = vec_from_raw_parts(
+                self.sub_names_list as *mut *const c_char,
+                self.sub_names_list_len,
+            );
+        }
     }
 }
 
-pub unsafe fn xorurl_encoder_into_repr_c(
-    xorurl_encoder: NativeXorUrlEncoder,
-) -> Result<XorUrlEncoder> {
-    // let sub_names = string_vec_to_c_str_str(xorurl_encoder.sub_names())?; // Todo: update to String Vec
-    let sub_names = if !xorurl_encoder.sub_names().is_empty() {
-        serde_json::to_string(&xorurl_encoder.sub_names())?
+pub unsafe fn safe_url_into_repr_c(safe_url: NativeSafeUrl) -> Result<SafeUrl> {
+    let sub_names_list = if safe_url.sub_names_vec().is_empty() {
+        std::ptr::null()
     } else {
-        String::new()
+        string_vec_to_c_str_str(safe_url.sub_names_vec().to_vec())?
     };
-
-    Ok(XorUrlEncoder {
-        encoding_version: xorurl_encoder.encoding_version(),
-        xorname: xorurl_encoder.xorname().0,
-        type_tag: xorurl_encoder.type_tag(),
-        data_type: xorurl_encoder.data_type() as u64,
-        content_type: xorurl_encoder.content_type().value()?,
-        path: CString::new(xorurl_encoder.path())?.into_raw(),
-        sub_names: CString::new(sub_names)?.into_raw(),
-        // sub_names: sub_names, // Todo: update to String Vec
-        // sub_names_len: xorurl_encoder.sub_names().len(),
-        content_version: xorurl_encoder.content_version().unwrap_or_else(|| 0),
+    Ok(SafeUrl {
+        encoding_version: safe_url.encoding_version(),
+        xorname: safe_url.xorname().0,
+        public_name: CString::new(safe_url.public_name())?.into_raw(),
+        top_name: CString::new(safe_url.top_name())?.into_raw(),
+        sub_names: CString::new(safe_url.sub_names())?.into_raw(),
+        sub_names_list,
+        sub_names_list_len: safe_url.sub_names_vec().len(),
+        type_tag: safe_url.type_tag(),
+        data_type: safe_url.data_type() as u64,
+        content_type: safe_url.content_type().value()?,
+        path: CString::new(safe_url.path())?.into_raw(),
+        query_string: CString::new(safe_url.query_string())?.into_raw(),
+        fragment: CString::new(safe_url.fragment())?.into_raw(),
+        content_version: safe_url.content_version().unwrap_or_else(|| 0),
+        safeurl_type: safe_url.safeurl_type().value()?,
     })
-}
-
-pub unsafe fn native_xorurl_encoder_from_repr_c(
-    encoder: &XorUrlEncoder,
-) -> Result<NativeXorUrlEncoder> {
-    let sub_names: Vec<String> =
-        serde_json::from_str(&String::clone_from_repr_c(encoder.sub_names)?)?;
-    Ok(NativeXorUrlEncoder::new(
-        XorName(encoder.xorname),
-        encoder.type_tag,
-        SafeDataType::from_u64(encoder.data_type)?,
-        SafeContentType::from_u16(encoder.content_type)?,
-        from_c_str_to_str_option(encoder.path),
-        Some(sub_names),
-        // c_str_str_to_string_vec(encoder.sub_names, encoder.sub_names_len), // Todo: update to String Vec
-        Some(encoder.content_version),
-    )?)
 }
 
 #[repr(C)]
@@ -510,64 +560,6 @@ pub unsafe fn processed_entries_into_repr_c(
     Ok(ProcessedEntries {
         processed_entries,
         processed_entries_len,
-    })
-}
-
-#[repr(C)]
-pub struct NrsMapContainerInfo {
-    pub public_name: *const c_char,
-    pub xorurl: *const c_char,
-    pub xorname: XorNameArray,
-    pub type_tag: u64,
-    pub version: u64,
-    pub nrs_map: *const c_char,
-    pub data_type: u64,
-}
-
-impl Drop for NrsMapContainerInfo {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.public_name.is_null() {
-                let _ = CString::from_raw(self.public_name as *mut _);
-            }
-
-            if !self.xorurl.is_null() {
-                let _ = CString::from_raw(self.xorurl as *mut _);
-            }
-
-            if !self.nrs_map.is_null() {
-                let _ = CString::from_raw(self.nrs_map as *mut _);
-            }
-        }
-    }
-}
-
-impl NrsMapContainerInfo {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            public_name: CString::new(String::new())?.into_raw(),
-            xorurl: CString::new(String::new())?.into_raw(),
-            xorname: [0; 32],
-            type_tag: 0,
-            version: 0,
-            nrs_map: CString::new(String::new())?.into_raw(),
-            data_type: 0,
-        })
-    }
-}
-
-pub unsafe fn nrs_map_container_info_into_repr_c(
-    nrs_container_info: &NativeNrsMapContainerInfo,
-) -> Result<NrsMapContainerInfo> {
-    let nrs_map_json = serde_json::to_string(&nrs_container_info.nrs_map)?;
-    Ok(NrsMapContainerInfo {
-        public_name: CString::new(nrs_container_info.public_name.clone())?.into_raw(),
-        xorurl: CString::new(nrs_container_info.xorurl.clone())?.into_raw(),
-        xorname: nrs_container_info.xorname.0,
-        type_tag: nrs_container_info.type_tag,
-        version: nrs_container_info.version,
-        nrs_map: CString::new(nrs_map_json)?.into_raw(),
-        data_type: nrs_container_info.data_type.clone() as u64,
     })
 }
 

@@ -10,9 +10,11 @@
 #[macro_use]
 extern crate duct;
 use criterion::Criterion;
-
-use safe_cmd_test_utilities::get_bin_location;
 use std::time::Duration;
+
+extern crate safe_cmd_test_utilities;
+
+use safe_cmd_test_utilities::{create_wallet_with_balance, get_bin_location};
 
 // sample size is _NOT_ the number of times the command is run...
 // https://bheisler.github.io/criterion.rs/book/analysis.html#measurement
@@ -26,16 +28,28 @@ fn main() {
     let mut criterion = custom_criterion();
     criterion = criterion.measurement_time(Duration::from_millis(20_000));
 
-    bench_cli_keys(&mut criterion);
+    bench_cli_wallet(&mut criterion);
 }
 
-fn bench_cli_keys(c: &mut Criterion) {
-    c.bench_function("generating keys", |b| {
+fn bench_cli_wallet(c: &mut Criterion) {
+    let (wallet_from, _pk, _sk) = create_wallet_with_balance("1600.000000001", None); // we need 1 nano to pay for the costs of creation
+    let (wallet_to, _pk, _sk) = create_wallet_with_balance("5.000000001", None); // we need 1 nano to pay for the costs of creation
+    c.bench_function("performing transactions", |b| {
         b.iter(|| {
-            //  use the safe command, so for bench it has to be installed
-            cmd!(get_bin_location(), "keys", "create", "--test-coins")
-                .read()
-                .unwrap()
+            let result = cmd!(
+                get_bin_location(),
+                "wallet",
+                "transfer",
+                "1",
+                "--from",
+                &wallet_from,
+                "--to",
+                &wallet_to
+            )
+            .read()
+            .unwrap();
+
+            assert!(result.contains("Success"))
         })
     });
 }
