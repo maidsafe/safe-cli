@@ -83,20 +83,21 @@ async fn start_listening(
     // and get them allowed/denied by the user using any of the subcribed endpoints
     let auth_reqs_handle2 = auth_reqs_handle.clone();
     let notif_endpoints_handle2 = notif_endpoints_handle.clone();
-    tokio::spawn(async {
-        monitor_pending_auth_reqs(auth_reqs_handle2, notif_endpoints_handle2).await
-    });
+    tokio::spawn(monitor_pending_auth_reqs(
+        auth_reqs_handle2,
+        notif_endpoints_handle2,
+    ));
 
     while let Some(conn) = incoming_conn.get_next().await {
-        tokio::spawn({
+        tokio::spawn(
             handle_connection(
                 conn,
                 safe_auth_handle.clone(),
                 auth_reqs_handle.clone(),
                 notif_endpoints_handle.clone(),
             )
-            .unwrap_or_else(move |e| error!("{reason}", reason = e.to_string()))
-        });
+            .unwrap_or_else(move |e| error!("{reason}", reason = e.to_string())),
+        );
     }
 
     Ok(())
@@ -132,6 +133,8 @@ async fn handle_request(
     auth_reqs_handle: SharedAuthReqsHandle,
     notif_endpoints_handle: SharedNotifEndpointsHandle,
 ) -> Result<()> {
+    let req_id = jsonrpc_req.id;
+
     // Execute the request
     let resp = process_jsonrpc_request(
         jsonrpc_req,
@@ -151,6 +154,6 @@ async fn handle_request(
         .await
         .map_err(|e| Error::GeneralError(format!("Failed to shutdown stream: {}", e)))?;
 
-    info!("Response sent, request complete");
+    info!("Response sent, request {} complete", req_id);
     Ok(())
 }

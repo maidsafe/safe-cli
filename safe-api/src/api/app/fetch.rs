@@ -19,6 +19,7 @@ pub use super::{
 use crate::{Error, Result};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 pub type Range = Option<(Option<u64>, Option<u64>)>;
 
@@ -103,8 +104,8 @@ impl Safe {
     /// # use safe_api::{Safe, fetch::SafeData};
     /// # use std::collections::BTreeMap;
     /// # let mut safe = Safe::default();
-    /// # safe.connect("", Some("fake-credentials")).unwrap();
     /// # async_std::task::block_on(async {
+    /// #   safe.connect("", Some("fake-credentials")).await.unwrap();
     ///     let (xorurl, _, _) = safe.files_container_create(Some("../testdata/"), None, true, false).await.unwrap();
     ///
     ///     let safe_data = safe.fetch( &format!( "{}/test.md", &xorurl.replace("?v=0", "") ), None ).await.unwrap();
@@ -149,8 +150,8 @@ impl Safe {
     /// # use safe_api::{Safe, fetch::SafeData};
     /// # use std::collections::BTreeMap;
     /// # let mut safe = Safe::default();
-    /// # safe.connect("", Some("fake-credentials")).unwrap();
     /// # async_std::task::block_on(async {
+    /// #   safe.connect("", Some("fake-credentials")).await.unwrap();
     ///     let (container_xorurl, _, _) = safe.files_container_create(Some("../testdata/"), None, true, false).await.unwrap();
     ///
     ///     let inspected_content = safe.inspect( &format!( "{}/test.md", &container_xorurl.replace("?v=0", "") ) ).await.unwrap();
@@ -264,7 +265,12 @@ async fn resolve_one_indirection(
                                 match file_item.get("link") {
                                     Some(link) => {
                                         let new_target_xorurl = XorUrlEncoder::from_url(link)?;
-                                        let metadata = (*file_item).clone();
+                                        let mut metadata = (*file_item).clone();
+                                        Path::new(&path).file_name().map(|name| {
+                                            name.to_str().map(|str| {
+                                                metadata.insert("name".to_string(), str.to_string())
+                                            })
+                                        });
                                         (files_map, Some((new_target_xorurl, Some(metadata))))
                                     }
                                     None => {
@@ -339,7 +345,7 @@ async fn resolve_one_indirection(
 
             the_xor.set_path(""); // we don't want the path, just the NRS Map xorurl and version
             let nrs_map_container = SafeData::NrsMapContainer {
-                public_name: the_xor.public_name().to_string(),
+                public_name: the_xor.top_name().to_string(),
                 xorurl: the_xor.to_xorurl_string(),
                 xorname: the_xor.xorname(),
                 type_tag: the_xor.type_tag(),
@@ -475,7 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_key() -> Result<()> {
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let preload_amount = "1324.12";
         let (xorurl, _key_pair) = safe.keys_create_preload_test_coins(preload_amount).await?;
 
@@ -499,7 +505,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_wallet() -> Result<()> {
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let xorurl = safe.wallet_create().await?;
 
         let xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
@@ -525,7 +531,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_files_container() -> Result<()> {
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let (xorurl, _, files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, false)
             .await?;
@@ -570,7 +576,7 @@ mod tests {
     async fn test_fetch_resolvable_container() -> Result<()> {
         let site_name: String = thread_rng().sample_iter(&Alphanumeric).take(15).collect();
 
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
 
         let (xorurl, _, the_files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, false)
@@ -619,7 +625,7 @@ mod tests {
     async fn test_fetch_resolvable_map_data() -> Result<()> {
         let site_name: String = thread_rng().sample_iter(&Alphanumeric).take(15).collect();
 
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let (xorurl, _, _the_files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, false)
             .await?;
@@ -658,7 +664,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_published_immutable_data() -> Result<()> {
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let data = b"Something super immutable";
         let xorurl = safe
             .files_put_published_immutable(data, Some("text/plain"), false)
@@ -696,7 +702,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_range_published_immutable_data() -> Result<()> {
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let saved_data = b"Something super immutable";
         let size = saved_data.len();
         let xorurl = safe
@@ -734,7 +740,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_range_from_files_container() -> Result<()> {
         use std::fs::File;
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let site_name: String = thread_rng().sample_iter(&Alphanumeric).take(15).collect();
 
         let (xorurl, _, _files_map) = safe
@@ -797,7 +803,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_unsupported() -> Result<()> {
-        let safe = new_safe_instance()?;
+        let safe = new_safe_instance().await?;
         let xorname = rand::random();
         let type_tag = 575_756_443;
         let xorurl = XorUrlEncoder::encode(
@@ -848,7 +854,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_unsupported_with_media_type() -> Result<()> {
-        let safe = new_safe_instance()?;
+        let safe = new_safe_instance().await?;
         let xorname = rand::random();
         let type_tag = 575_756_443;
         let xorurl = XorUrlEncoder::encode(
@@ -899,7 +905,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_published_immutable_data_with_path() -> Result<()> {
-        let mut safe = new_safe_instance()?;
+        let mut safe = new_safe_instance().await?;
         let data = b"Something super immutable";
         let xorurl = safe
             .files_put_published_immutable(data, None, false)
