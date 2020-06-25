@@ -9,8 +9,8 @@
 
 use super::{
     files::{FileItem, FileMeta, FilesMap},
+    glob,
     nrs_map::NrsMap,
-    realpath::RealPath,
     Safe, XorName,
 };
 pub use super::{
@@ -286,50 +286,116 @@ async fn resolve_one_indirection(
             );
 
             let path = the_xor.path_decoded()?;
-            let (files_map, next) = if resolve_path && path != "/" && !path.is_empty() {
-                // TODO: Move this logic (path resolver) to the FilesMap struct
-                let realpath = files_map.realpath(&path)?;
-                match &files_map.get(&realpath) {
-                    Some(file_item) => match file_item.get("type") {
-                        Some(file_type) => {
-                            if FileMeta::filetype_is_file(&file_type) {
-                                match file_item.get("link") {
-                                    Some(link) => {
-                                        let new_target_xorurl = XorUrlEncoder::from_url(link)?;
-                                        let mut metadata = (*file_item).clone();
-                                        Path::new(&path).file_name().map(|name| {
-                                            name.to_str().map(|str| {
-                                                metadata.insert("name".to_string(), str.to_string())
-                                            })
-                                        });
-                                        (files_map, Some((new_target_xorurl, Some(metadata))))
-                                    }
-                                    None => {
-                                        let msg = format!("FileItem is corrupt. It is missing a \"link\" property at path, \"{}\" on the FilesContainer at: {} ", path, xorurl);
-                                        return Err(Error::ContentError(msg));
-                                    }
-                                }
-                            } else if FileMeta::filetype_is_symlink(&file_type) {
-                                let msg = format!(
-                                    "symlink should not be present in resolved real path. {}",
-                                    realpath
-                                );
-                                return Err(Error::Unexpected(msg));
-                            } else {
-                                // Must be a directory.
-                                (gen_filtered_filesmap(&realpath, &files_map, &xorurl)?, None)
-                            }
-                        }
-                        None => {
-                            let msg = format!("FileItem is corrupt. It is missing a \"type\" property at path, \"{}\" on the FilesContainer at: {} ", path, xorurl);
-                            return Err(Error::ContentError(msg));
-                        }
-                    },
-                    None => (gen_filtered_filesmap(&realpath, &files_map, &xorurl)?, None),
-                }
+            let mut new_files_map = FilesMap::default();
+            let mut nextstep: Option<NextStepInfo> = None;
+            let mut count = 0u64;
+
+            if !resolve_path || path == "/" || path.is_empty() {
+                // We can just use the files_map without further path processing.
+                new_files_map = files_map;
             } else {
-                (files_map, None)
-            };
+                // a plain path does not have any glob patterns in it.
+                let is_plain_path = glob::Pattern::is_plain_path(&path);
+
+                // Find matching paths with glob().  Note:  all glob() really
+                // does is generate a pattern.  The actual matching takes
+                // place in the 'paths' next() iterator, ie the line
+                // 'for result in paths'.  For this reason, we can't know
+                // how many results were found until we actually traverse
+                // the iterator.
+                let paths = glob::glob(&files_map, &path).map_err(|e| {
+                    Error::ContentNotFound(format!("Pattern did not match. {:?}", e))
+                })?;
+
+                // note: we can have many matching paths for a glob pattern.
+                // but if is_plain_path = true, there should only be one or zero.
+                for result in paths {
+                    let pathbuf = match result {
+                        Ok(p) => p,
+                        Err(e) => {
+                            // if any error occurred, we report it and bail out.
+                            return Err(e.error().clone());
+                        }
+                    };
+
+                    count += 1;
+
+                    let realpath = pathbuf.display().to_string();
+                    match &files_map.get(&realpath) {
+                        Some(file_item) => match file_item.get("type") {
+                            Some(file_type) => {
+                                if FileMeta::filetype_is_file(&file_type) {
+                                    let fpath = format!(
+                                        "/{}",
+                                        Path::new(&realpath).file_name().unwrap().to_string_lossy()
+                                    );
+
+                                    if !is_plain_path {
+                                        // when evaluating pattern matches, we don't want to
+                                        // resolve the file(s) any further.
+                                        new_files_map
+                                            .insert(realpath.clone(), files_map[&realpath].clone());
+                                    } else {
+                                        match file_item.get("link") {
+                                            Some(link) => {
+                                                let new_target_xorurl =
+                                                    XorUrlEncoder::from_url(link)?;
+                                                let mut metadata = (*file_item).clone();
+                                                Path::new(&realpath).file_name().map(|name| {
+                                                    name.to_str().map(|str| {
+                                                        metadata.insert(
+                                                            "name".to_string(),
+                                                            str.to_string(),
+                                                        )
+                                                    })
+                                                });
+
+                                                new_files_map
+                                                    .insert(fpath, files_map[&realpath].clone());
+                                                nextstep =
+                                                    Some((new_target_xorurl, Some(metadata)));
+                                            }
+                                            None => {
+                                                let msg = format!("FileItem is corrupt. It is missing a \"link\" property at path, \"{}\" on the FilesContainer at: {} ", path, xorurl);
+                                                return Err(Error::ContentError(msg));
+                                            }
+                                        }
+                                    }
+                                } else if FileMeta::filetype_is_symlink(&file_type) {
+                                    new_files_map
+                                        .insert(realpath.clone(), files_map[&realpath].clone());
+                                } else if FileMeta::filetype_is_dir(&file_type) {
+                                    let mut fm = gen_filtered_filesmap(
+                                        &realpath,
+                                        &files_map,
+                                        &xorurl,
+                                        is_plain_path,
+                                    )?;
+                                    new_files_map.append(&mut fm);
+                                } else {
+                                    // unrecognized 'type'
+                                    let msg = format!("FileItem is corrupt. Invalid \"type\" property \"{}\" at path, \"{}\" on the FilesContainer at: {} ", file_type, path, xorurl);
+                                    return Err(Error::ContentError(msg));
+                                }
+                            }
+                            None => {
+                                // 'type' metadata property not found
+                                let msg = format!("FileItem is corrupt. It is missing a \"type\" property at path, \"{}\" on the FilesContainer at: {} ", path, xorurl);
+                                return Err(Error::ContentError(msg));
+                            }
+                        },
+                        None => {
+                            // path not found in FilesMap.  count remains 0, so ContentNotFound
+                            // will be generated below.
+                        }
+                    }
+                }
+                if count == 0 {
+                    // Path/Pattern not found in FilesMap
+                    let msg = format!("Path does not match any file or folder: {}", path);
+                    return Err(Error::ContentNotFound(msg));
+                }
+            }
 
             // We don't want the path just the FilesContainer XOR-URL and version
             the_xor.set_path("");
@@ -338,11 +404,16 @@ async fn resolve_one_indirection(
                 xorname: the_xor.xorname(),
                 type_tag: the_xor.type_tag(),
                 version,
-                files_map,
+                files_map: new_files_map,
                 data_type: the_xor.data_type(),
                 resolved_from: url,
             };
 
+            let next = if nextstep.is_some() && count == 1 {
+                nextstep
+            } else {
+                None
+            };
             Ok((safe_data, next))
         }
         SafeContentType::NrsMapContainer => {
@@ -551,7 +622,12 @@ async fn retrieve_immd(
     Ok((safe_data, None))
 }
 
-fn gen_filtered_filesmap(urlpath: &str, files_map: &FilesMap, xorurl: &str) -> Result<FilesMap> {
+fn gen_filtered_filesmap(
+    urlpath: &str,
+    files_map: &FilesMap,
+    xorurl: &str,
+    is_plain_path: bool,
+) -> Result<FilesMap> {
     let mut filtered_filesmap = FilesMap::default();
     let folder_path = if !urlpath.ends_with('/') {
         format!("{}/", urlpath)
@@ -559,9 +635,23 @@ fn gen_filtered_filesmap(urlpath: &str, files_map: &FilesMap, xorurl: &str) -> R
         urlpath.to_string()
     };
     files_map.iter().for_each(|(filepath, fileitem)| {
-        if filepath.starts_with(&folder_path) {
+        let target = if is_plain_path {
+            &folder_path
+        } else {
+            urlpath.trim_end_matches('/')
+        };
+        if filepath.starts_with(target) {
             let mut new_path = filepath.clone();
-            new_path.replace_range(..folder_path.len(), "");
+            if is_plain_path {
+                new_path.replace_range(..folder_path.len(), "");
+            } else {
+                let mut parts: Vec<&str> = urlpath.trim_end_matches('/').split('/').collect();
+                if !parts.is_empty() {
+                    parts.pop();
+                }
+                let fp = parts.join("/");
+                new_path.replace_range(..fp.len(), "");
+            }
             filtered_filesmap.insert(new_path, fileitem.clone());
         }
     });

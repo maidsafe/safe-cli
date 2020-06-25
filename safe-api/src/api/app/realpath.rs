@@ -89,9 +89,6 @@ impl RealPath for FilesMap {
                                 newpath = Vec::<&str>::new();
                                 break;
                             } else if meta.is_dir() {
-                                if iter.peek() == None {
-                                    ended = true;
-                                }
                             } else {
                                 // must be file.
                                 ended = true;
@@ -102,15 +99,19 @@ impl RealPath for FilesMap {
                         // empty directories existed, in which case there is
                         // always a further path component.  And of course it
                         // applies for an invalid path.
-                        None => {
-                            if iter.peek() == None {
-                                ended = true;
-                            }
-                        }
+                        None => {}
                     }
+                }
+                if iter.peek() == None {
+                    ended = true;
                 }
             }
         }
-        Ok(newpath.join("/"))
+        let p = if newpath.len() == 1 && newpath[0].is_empty() {
+            "/".to_string()
+        } else {
+            newpath.join("/")
+        };
+        Ok(p)
     }
 }

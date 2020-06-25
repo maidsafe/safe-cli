@@ -11,6 +11,7 @@ mod auth;
 mod consts;
 #[cfg(feature = "scl-mock")]
 mod fake_scl;
+mod glob;
 mod helpers;
 mod keys;
 mod nrs;

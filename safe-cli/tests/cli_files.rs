@@ -954,7 +954,7 @@ fn calling_files_ls() {
 //
 //    expected result:
 //       a. exit code = 1
-//       b. stderr contains "No data found for path"
+//       b. stderr contains "Path does not match any file or folder"
 #[test]
 fn calling_files_ls_with_invalid_path() -> Result<(), String> {
     let (files_container_xor, _processed_files) = upload_testfolder_trailing_slash()?;
@@ -967,7 +967,7 @@ fn calling_files_ls_with_invalid_path() -> Result<(), String> {
     let args = ["files", "ls", &partial_path, "--json"];
     let stderr = safe_cmd_stderr(&args, Some(1))?;
 
-    assert!(stderr.contains("No data found for path"));
+    assert!(stderr.contains("Path does not match any file or folder"));
 
     Ok(())
 }
