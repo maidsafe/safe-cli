@@ -40,5 +40,4 @@ safe-nd = "~0.10.0"
 unwrap = "1.2.1"
 
 [features]
-fake-auth = ["safe-api/fake-auth"]
 bindings = ["safe_bindgen"]
