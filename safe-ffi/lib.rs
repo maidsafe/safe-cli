@@ -10,9 +10,6 @@
 #[macro_use]
 extern crate ffi_utils;
 
-#[cfg(feature = "mock-network")]
-pub use safe_authenticator_ffi::*;
-
 pub mod ffi;
 
 pub use ffi::fetch::*;

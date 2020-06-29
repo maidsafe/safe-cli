@@ -27,8 +27,6 @@ use errors::Result;
 use ffi_utils::{catch_unwind_cb, FfiResult, OpaqueCtx, ReprC, FFI_RESULT_OK};
 use helpers::from_c_str_to_str_option;
 use safe_api::Safe;
-#[cfg(feature = "mock-network")]
-use safe_authenticator_ffi::auth_is_mock;
 use safe_core::config_handler;
 use std::{
     ffi::{CString, OsStr},
@@ -93,30 +91,4 @@ pub unsafe extern "C" fn app_set_config_dir_path(
         o_cb(user_data, FFI_RESULT_OK);
         Ok(())
     });
-}
-
-#[no_mangle]
-pub extern "C" fn app_is_mock() -> bool {
-    cfg!(feature = "mock-network")
-}
-
-// Don't remove this. This is needed so that build doesn't strip auth_ffi symbols.
-#[no_mangle]
-#[cfg(feature = "mock-network")]
-pub extern "C" fn get_mock_auth() -> bool {
-    let _ = auth_is_mock();
-    cfg!(feature = "mock-network")
-}
-
-#[test]
-#[cfg(feature = "mock-network")]
-fn test_mock_build() {
-    assert_eq!(app_is_mock(), true);
-}
-
-// Test mock detection when not compiled against mock-routing.
-#[test]
-#[cfg(not(feature = "mock-network"))]
-fn test_not_mock_build() {
-    assert_eq!(app_is_mock(), false);
 }

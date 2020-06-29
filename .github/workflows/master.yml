@@ -131,23 +131,6 @@ jobs:
           name: ${{ matrix.component }}-${{ matrix.target }}-prod
           path: target/release/${{ matrix.output }}
 
-      # Build dev FFI lib
-      - name: Build FFI lib - Dev
-        run: cargo build --release --manifest-path=${{ matrix.component }}/Cargo.toml --features=mock-network
-
-      # Notarize FFI lib
-      - name: Sign & Notarize
-        shell: bash
-        run: ./resources/notarize.sh ${{ matrix.output }}
-        if: matrix.target == 'macOS-latest'
-
-      # Upload dev FFI lib
-      - name: Upload dev FFI lib
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.component }}-${{ matrix.target }}-dev
-          path: target/release/${{ matrix.output }}
-
   build-mac-cli-authd:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -204,7 +187,7 @@ jobs:
       - name: Sign & Notarize
         shell: bash
         run: ./resources/notarize.sh ${{ matrix.target }}
-      
+
       # List contents of release folder
       - name: what is in release...
         shell: bash
@@ -296,17 +279,6 @@ jobs:
           name: safe-ffi-${{ matrix.target }}-prod
           path: target/${{ matrix.target }}/release/libsafe_ffi.so
 
-      # Build dev native lib.
-      - name: Build native lib - Dev
-        run: cargo build --release --manifest-path=${{ matrix.component }}/Cargo.toml --target=${{ matrix.target }} --features=mock-network
-
-      # Upload dev native lib.
-      - name: Upload dev native lib
-        uses: actions/upload-artifact@master
-        with:
-          name: safe-ffi-${{ matrix.target }}-dev
-          path: target/${{ matrix.target }}/release/libsafe_ffi.so
-
   build-ffi-ios:
     name: Build FFI iOS
     runs-on: macos-latest
@@ -362,18 +334,6 @@ jobs:
         uses: actions/upload-artifact@master
         with:
           name: safe-ffi-apple-ios-prod
-          path: target/universal/release/libsafe_ffi.a
-
-      # Build dev universal library.
-      - name: Build universal lib - Dev
-        shell: bash
-        run: cargo lipo --release --manifest-path=safe-ffi/Cargo.toml --features=mock-network
-
-      # Upload dev universal library.
-      - name: Upload dev universal lib
-        uses: actions/upload-artifact@master
-        with:
-          name: safe-ffi-apple-ios-dev
           path: target/universal/release/libsafe_ffi.a
 
   # Unfortunately, for artifact retrieval, there's not really a way to avoid having this huge list of
