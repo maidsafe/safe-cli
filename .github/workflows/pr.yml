@@ -46,7 +46,7 @@ jobs:
       - name: Code Coverage - safe-api
         uses: actions-rs/tarpaulin@master
         with:
-          args: '-v --manifest-path=safe-api/Cargo.toml --features=scl-mock --exclude-files=safe-cli/*,jsonrpc-quic/*,safe-authd/*,safe-ffi/* --out Lcov -- --test-threads=1'
+          args: '-v --manifest-path=safe-api/Cargo.toml --exclude-files=safe-cli/*,jsonrpc-quic/*,safe-authd/*,safe-ffi/* --out Lcov -- --test-threads=1'
 
       # Push tarpaulin results to coveralls.io
       - name: Coveralls
