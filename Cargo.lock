@@ -3429,6 +3429,7 @@ source = "git+https://github.com/maidsafe/safe_client_libs#1deaa230e38dd03d9664a
 dependencies = [
  "async-trait",
  "bincode",
+ "env_logger 0.6.2",
  "ffi_utils",
  "futures 0.3.5",
  "futures-util",
@@ -3451,6 +3452,7 @@ source = "git+https://github.com/maidsafe/safe_client_libs#1deaa230e38dd03d9664a
 dependencies = [
  "async-trait",
  "bincode",
+ "env_logger 0.6.2",
  "ffi_utils",
  "futures 0.3.5",
  "jni",

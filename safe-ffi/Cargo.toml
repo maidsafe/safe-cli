@@ -41,3 +41,4 @@ unwrap = "1.2.1"
 
 [features]
 bindings = ["safe_bindgen"]
+scl-mock = ["safe-api/scl-mock", "safe_authenticator_ffi/mock-network"]

@@ -33,6 +33,9 @@ use std::{
     os::raw::{c_char, c_void},
 };
 
+#[cfg(feature = "scl-mock")]
+use safe_authenticator_ffi::auth_is_mock;
+
 #[no_mangle]
 pub unsafe extern "C" fn auth_app(
     app_id: *const c_char,
@@ -91,4 +94,30 @@ pub unsafe extern "C" fn app_set_config_dir_path(
         o_cb(user_data, FFI_RESULT_OK);
         Ok(())
     });
+}
+
+#[no_mangle]
+pub extern "C" fn app_is_mock() -> bool {
+    cfg!(feature = "scl-mock")
+}
+
+// Don't remove this. This is needed so that build doesn't strip auth_ffi symbols.
+#[no_mangle]
+#[cfg(feature = "scl-mock")]
+pub extern "C" fn get_mock_auth() -> bool {
+    let _ = auth_is_mock();
+    cfg!(feature = "scl-mock")
+}
+
+#[test]
+#[cfg(feature = "scl-mock")]
+fn test_mock_build() {
+    assert_eq!(app_is_mock(), true);
+}
+
+// Test mock detection when not compiled against mock-routing.
+#[test]
+#[cfg(not(feature = "scl-mock"))]
+fn test_not_mock_build() {
+    assert_eq!(app_is_mock(), false);
 }
