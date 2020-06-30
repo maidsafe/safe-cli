@@ -75,10 +75,10 @@ pub type AuthAllowPrompt = dyn Fn(AuthReq) -> Option<bool> + std::marker::Send +
 // Authenticator method for getting a status report of the safe-authd
 const SAFE_AUTHD_METHOD_STATUS: &str = "status";
 
-// Authenticator method for login into a SAFE account
+// Authenticator method for logging into a SAFE account
 const SAFE_AUTHD_METHOD_LOGIN: &str = "login";
 
-// Authenticator method for loging out from a SAFE account
+// Authenticator method for logging out from a SAFE account
 const SAFE_AUTHD_METHOD_LOGOUT: &str = "logout";
 
 // Authenticator method for creating a new SAFE account
@@ -494,8 +494,8 @@ fn authd_run_cmd(authd_path: Option<&str>, args: &[&str]) -> Result<()> {
 
     let output = Command::new(&path_str)
         .args(args)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .output()
         .map_err(|err| {
             Error::AuthdClientError(format!(

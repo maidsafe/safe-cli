@@ -18,7 +18,6 @@ use multibase::{decode, encode, Base};
 use safe_nd::{XorName, XOR_NAME_LEN};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::iter::FromIterator;
 use tiny_keccak::sha3_256;
 use uhttp_uri::HttpUri;
 use url::Url; // for parsing raw path
@@ -227,7 +226,7 @@ impl SafeUrlParts {
         }
 
         // parse top_name and sub_names from name
-        let names_vec = Vec::from_iter(public_name.split('.').map(String::from));
+        let names_vec: Vec<String> = public_name.split('.').map(String::from).collect();
         let top_name = names_vec[names_vec.len() - 1].to_string();
         let sub_names_vec = (&names_vec[0..names_vec.len() - 1]).to_vec();
         let sub_names = sub_names_vec.join(".");
@@ -665,6 +664,13 @@ impl SafeUrl {
         self.content_type.clone()
     }
 
+    /// sets the SAFE content type
+    pub fn set_content_type(&mut self, content_type: SafeContentType) -> Result<()> {
+        self.content_type_u16 = content_type.value()?;
+        self.content_type = content_type;
+        Ok(())
+    }
+
     /// returns XorName
     pub fn xorname(&self) -> XorName {
         self.xor_name
@@ -709,6 +715,16 @@ impl SafeUrl {
     /// eg: a.b.name --> &["a", "b"]
     pub fn sub_names_vec(&self) -> &[String] {
         &self.sub_names_vec
+    }
+
+    /// sets sub_names portion of URL
+    pub fn set_sub_names(&mut self, sub_names: &str) -> Result<()> {
+        let tmpurl = format!("{}{}.{}", SAFE_URL_PROTOCOL, sub_names, self.top_name());
+        let parts = SafeUrlParts::parse(&tmpurl)?;
+        self.sub_names = parts.sub_names;
+        self.sub_names_vec = parts.sub_names_vec;
+        self.public_name = parts.public_name;
+        Ok(())
     }
 
     /// returns XorUrl type tag
@@ -1133,12 +1149,17 @@ impl SafeUrl {
         type_tag: u64,
         content_type: SafeContentType,
         base: XorUrlBase,
+        is_private: bool,
     ) -> Result<String> {
         SafeUrl::encode(
             xor_name,
             None,
             type_tag,
-            SafeDataType::PublicSequence,
+            if is_private {
+                SafeDataType::PrivateSequence
+            } else {
+                SafeDataType::PublicSequence
+            },
             content_type,
             None,
             None,
@@ -1469,6 +1490,7 @@ mod tests {
             4_584_545,
             SafeContentType::FilesContainer,
             XorUrlBase::Base64,
+            false,
         )?;
         let base64_xorurl = "safe://mQACAzEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyRfRh";
         assert_eq!(xorurl, base64_xorurl);
@@ -1544,6 +1566,7 @@ mod tests {
             type_tag,
             SafeContentType::Wallet,
             XorUrlBase::Base32z,
+            false,
         )?;
 
         let xorurl_with_path = format!("{}/subfolder/file", xorurl);
@@ -1735,6 +1758,20 @@ mod tests {
         let result = x.set_query_key(URL_VERSION_QUERY_NAME, Some("non-integer"));
         assert!(result.is_err());
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_safeurl_set_sub_names() -> Result<()> {
+        let mut x = SafeUrl::from_url("safe://sub1.sub2.myname?v=5")?;
+        assert_eq!(x.sub_names(), "sub1.sub2");
+        assert_eq!(x.sub_names_vec(), ["sub1", "sub2"]);
+
+        x.set_sub_names("s1.s2.s3")?;
+        assert_eq!(x.sub_names(), "s1.s2.s3");
+        assert_eq!(x.sub_names_vec(), ["s1", "s2", "s3"]);
+
+        assert_eq!(x.to_string(), "safe://s1.s2.s3.myname?v=5");
         Ok(())
     }
 

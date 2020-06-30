@@ -187,7 +187,8 @@ unsafe fn invoke_callback(
         }) => {
             let nrs_map_json = serde_json::to_string(&nrs_map)?;
             let nrs_map_container = NrsMapContainer {
-                public_name: CString::new(public_name.clone())?.into_raw(),
+                public_name: CString::new(public_name.clone().unwrap_or_else(|| "".to_string()))?
+                    .into_raw(),
                 xorurl: CString::new(xorurl.clone())?.into_raw(),
                 xorname: xorname.0,
                 type_tag: *type_tag,
@@ -198,7 +199,7 @@ unsafe fn invoke_callback(
             };
             o_nrs_map_container(user_data.0, &nrs_map_container);
         }
-        Ok(SafeData::PublicSequence { .. }) => {
+        Ok(SafeData::PublicSequence { .. }) | Ok(SafeData::PrivateSequence { .. }) => {
             let ffi_result = NativeResult {
                 error_code: 0,
                 description: Some(
