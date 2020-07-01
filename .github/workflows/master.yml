@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - deploy-fix
 
 env:
   # Run all cargo commands with --verbose.
