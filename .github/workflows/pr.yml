@@ -1,3 +1,8 @@
+# PR workflow.
+#
+# Runs full suite of checks, with warnings treated as errors.
+# Gather code coverage stats and publish them on coveralls.io.
+
 name: PR
 
 on: [pull_request, push]
@@ -12,10 +17,10 @@ env:
 
 jobs:
   clippy:
-    name: Clippy, fmt & code coverage checks
+    name: Clippy & fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust and required components
         uses: actions-rs/toolchain@v1
         with:
@@ -24,9 +29,9 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      # Check if the code is formatted correctly.
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
 
       # Cache.
       - name: Cargo cache
@@ -38,22 +43,56 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
 
+      # Check if the code is formatted correctly.
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
       # Run Clippy.
       - name: Clippy checks
         run: cargo clippy --all-targets --all-features
 
-      # Run cargo tarpaulin
-      - name: Code Coverage - safe-api
+  coverage:
+    name: Code coverage check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      # Install Rust and required components
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
+      # Cache.
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run cargo tarpaulin & push result to coveralls.io
+      - name: rust-tarpaulin code coverage check
         uses: actions-rs/tarpaulin@master
         with:
-          args: '-v --manifest-path=safe-api/Cargo.toml --exclude-files=safe-cli/*,jsonrpc-quic/*,safe-authd/*,safe-ffi/* --out Lcov -- --test-threads=1'
-
-      # Push tarpaulin results to coveralls.io
-      - name: Coveralls
+          args: '-v --manifest-path=safe-api/Cargo.toml --release --exclude-files=safe-cli/*,jsonrpc-quic/*,safe-authd/*,safe-ffi/* --out Lcov'
+      - name: Push code coverage results to coveralls.io
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel: true
           path-to-lcov: ./lcov.info
+      - name: Coveralls Finished
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          parallel-finished: true
 
   build-ffi-android:
     name: Build FFI Android
@@ -63,7 +102,7 @@ jobs:
         target: [armv7-linux-androideabi, x86_64-linux-android]
         component: [safe-ffi]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -71,6 +110,10 @@ jobs:
           profile: minimal
           override: true
           target: ${{ matrix.target }}
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
 
       # Cache.
       - name: Cargo cache
@@ -145,7 +188,7 @@ jobs:
       PKG_CONFIG_ALLOW_CROSS: 1
       DEVELOPER_DIR: /Applications/Xcode_11.2.app/Contents/Developer
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust target aarch64-apple-ios
         uses: actions-rs/toolchain@v1
         with:
@@ -160,6 +203,10 @@ jobs:
           profile: minimal
           override: true
           target: x86_64-apple-ios
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
 
       # Cache.
       - name: Cargo cache
@@ -214,13 +261,17 @@ jobs:
         shell: bash
         run: git config --global --add core.symlinks true
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
+
+      # Generate Cargo.lock, needed for the cache.
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
 
       # Cache.
       - name: Cargo cache
