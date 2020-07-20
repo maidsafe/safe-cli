@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - ffi
 
 env:
   # Run all cargo commands with --verbose.
