@@ -879,6 +879,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72aa14c04dfae8dd7d8a2b1cb7ca2152618cd01336dbfe704b8dcbf8d41dbd69"
 
 [[package]]
+name = "data-encoding-macro"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de6489dde5128f5ab2f71f88f8807a237cecf08d96dc7ca4be64e0730dc7d961"
+dependencies = [
+ "data-encoding",
+ "data-encoding-macro-internal",
+ "proc-macro-hack",
+]
+
+[[package]]
+name = "data-encoding-macro-internal"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d2d6daefd5f1d4b74a891a5d2ab7dccba028d423107c074232a0c5dc0d40a9e"
+dependencies = [
+ "data-encoding",
+ "proc-macro-hack",
+ "syn 1.0.33",
+]
+
+[[package]]
 name = "dbl"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2142,6 +2164,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "multibase"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b78c60039650ff12e140ae867ef5299a58e19dded4d334c849dc7177083667e2"
+dependencies = [
+ "base-x",
+ "data-encoding",
+ "data-encoding-macro",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3226,7 +3259,7 @@ dependencies = [
  "lazy_static",
  "log 0.4.8",
  "mime_guess",
- "multibase",
+ "multibase 0.8.0",
  "rand 0.7.3",
  "rand_core 0.5.1",
  "relative-path",
@@ -3290,7 +3323,7 @@ dependencies = [
  "indicatif 0.14.0",
  "isatty",
  "log 0.4.8",
- "multibase",
+ "multibase 0.6.0",
  "num-traits",
  "percent-encoding 2.1.0",
  "predicates",
@@ -3323,7 +3356,7 @@ name = "safe-cmd-test-utilities"
 version = "1.0.0"
 dependencies = [
  "duct",
- "multibase",
+ "multibase 0.6.0",
  "rand 0.7.3",
  "safe-api",
  "safe-nd",
@@ -3364,7 +3397,7 @@ dependencies = [
  "ed25519",
  "ed25519-dalek",
  "hex_fmt",
- "multibase",
+ "multibase 0.6.0",
  "rand 0.7.3",
  "serde",
  "sha3",
