@@ -21,7 +21,7 @@ use safe_api::{
 use safe_cmd_test_utilities::{
     create_preload_and_get_keys, get_random_nrs_string, parse_cat_wallet_output,
     parse_files_container_output, parse_files_put_or_sync_output, safe_cmd_stderr, safe_cmd_stdout,
-    test_symlinks_are_valid, upload_test_symlinks_folder, CLI,
+    test_symlinks_are_valid, upload_testfolder_trailing_slash, upload_test_symlinks_folder, CLI,
 };
 use std::process::Command;
 use unwrap::unwrap;
@@ -448,3 +448,87 @@ fn calling_cat_symlinks_resolve_dir_outside() -> Result<(), String> {
 
     Ok(())
 }
+
+// Test:  safe cat <src><pattern>
+//    src is testdata dir, put with trailing slash.
+//
+//    pattern is a path with glob-recognizable patterns
+//    such as *, **, ?, [0-9], etc.
+//    See: https://docs.rs/glob/0.3.0/glob/struct.Pattern.html
+//
+//    expected result: cmd output matches number of expected
+//                     results, and also expected paths are present.
+#[test]
+fn calling_cat_glob_pattern() -> Result<(), String> {
+
+    let (url, ..) = upload_testfolder_trailing_slash()?;
+    let mut u = XorUrlEncoder::from_url(&url)?;
+
+    test_glob_pattern(&mut u, "/*.md", Some(2), &["/another.md", "/test.md"])?;
+    test_glob_pattern(&mut u, "*.md", Some(2), &["/another.md", "/test.md"])?;
+    test_glob_pattern(&mut u, "s?bf*er", None, &["/subfolder"])?;
+    test_glob_pattern(&mut u, "s?bf*er/*2*", Some(1), &["/subfolder/sub2.md"])?;
+    test_glob_pattern(&mut u, "/**/*.md", Some(5), &["/another.md", "/subfolder/sub2.md", "/.subhidden/test.md"])?;
+    test_glob_pattern(&mut u, "/[an]*", Some(2), &["/another.md", "/noextension"])?;
+    test_glob_pattern(&mut u, "/[!an]*", None, &["/emptyfolder", "/subfolder", "/.hidden.txt", "/.subhidden", "/test.md"])?;
+    test_glob_pattern(&mut u, "/**/*[0-9]*", Some(1), &["/subfolder/sub2.md"])?;
+
+    Ok(())
+}
+
+// Test:  safe cat <src><pattern>
+//    src is test_symlinks dir, put with trailing slash.
+//
+//    pattern is a path with glob-recognizable patterns
+//    such as *, **, ?, [0-9], etc.
+//    See: https://docs.rs/glob/0.3.0/glob/struct.Pattern.html
+//
+//    In particular, the chosen patterns are chosen to match symlinks
+//    and/or require that glob traverse symlinks to find match.
+//
+//    expected result: cmd output matches number of expected
+//                     results, and also expected paths are present.
+#[test]
+fn calling_cat_glob_pattern_with_symlinks() -> Result<(), String> {
+
+    // Bail if test_symlinks not valid. Typically indicates missing perms on windows.
+    if !test_symlinks_are_valid()? {
+        return Ok(());
+    }
+
+    let (url, ..) = upload_test_symlinks_folder(true)?;
+    let mut u = XorUrlEncoder::from_url(&url)?;
+
+    test_glob_pattern(&mut u, "/dir_link_link/r*.md", Some(1), &["/sub/readme.md"])?;
+    test_glob_pattern(&mut u, "/dir_link_link/parent_dir/[ar]*.txt", Some(2), &["/absolute_links.txt", "/realfile.txt"])?;
+    test_glob_pattern(&mut u, "/dir_link_link/../[ar]*.txt", Some(2), &["/absolute_links.txt", "/realfile.txt"])?;
+    test_glob_pattern(&mut u, "/**/[bfi]*", Some(5), &["/broken_rel_link.txt", "/file_outside", "/sub/infinite_loop"])?;
+    test_glob_pattern(&mut u, "/**/?_file*", Some(1), &["/sub/deep/a_file.txt"])?;
+    test_glob_pattern(&mut u, "/dir_link/**/?_file*", Some(1), &["/sub/deep/a_file.txt"])?;
+
+    Ok(())
+}
+
+fn test_glob_pattern(u: &mut XorUrlEncoder, path: &str, expect_cnt: Option<usize>, expect_paths: &[&str]) -> Result<(), String> {
+    println!("testing path/pattern: {}", path);
+    u.set_path(path);
+
+    let args = ["cat", &u.to_string(), "--json"];
+    let output = safe_cmd_stdout(&args, Some(0))?;
+
+    let (_url, map) = parse_files_container_output(&output);
+
+    if let Some(ec) = expect_cnt {
+        assert_eq!(map.len(), ec);
+    }
+    for s in expect_paths {
+        // we do it this way so that string will appear in test output
+        // upon assertion failure.
+        if !map.contains_key(&(*s).to_string()) {
+            assert_eq!(&"", s);
+        }
+    }
+
+    Ok(())
+}
+

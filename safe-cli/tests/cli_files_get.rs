@@ -608,7 +608,7 @@ fn files_get_src_path_is_invalid() -> Result<(), String> {
 
     assert!(String::from_utf8_lossy(&cmd_output.stderr)
         .into_owned()
-        .contains("No data found for path \"/path/is/invalid/\" on the FilesContainer"));
+        .contains("Path does not match any file or folder: /path/is/invalid"));
 
     Ok(())
 }

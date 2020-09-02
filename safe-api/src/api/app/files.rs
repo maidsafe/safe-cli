@@ -1020,6 +1020,54 @@ async fn add_or_update_file_item(
     }
 }
 
+// Adds directories in a path to a FilesMap.
+// This is needed because 'files put' and 'files add' allow one to specify
+// a prefix path of arbitrary depth that will contain the uploaded content.
+async fn add_dirs_to_files_map(
+    safe: &mut Safe,
+    path: &str,
+    mut files_map: &mut FilesMap,
+    pop_last: bool,
+    dry_run: bool,
+) {
+    // Generate a FileItem entry for each component of path, if present.
+    if !path.is_empty() && path != "/" {
+        let mut parts: Vec<&str> = path.trim_matches('/').split('/').collect();
+        if pop_last && parts.len() > 1 {
+            parts.pop();
+        }
+        if parts.is_empty() {
+            return;
+        }
+        let mut cur_parts = Vec::<&str>::new();
+        let mut pf = ProcessedFiles::new();
+
+        for p in parts {
+            if p.is_empty() {
+                continue;
+            }
+            cur_parts.push(p);
+            let curpath = format!("/{}", cur_parts.join("/"));
+
+            if !files_map.contains_key(&curpath) {
+                add_or_update_file_item(
+                    safe,
+                    &curpath,
+                    &curpath,
+                    &Path::new(&curpath),
+                    &FileMeta::from_type_and_size("inode/directory", "0"),
+                    None,
+                    false,
+                    dry_run,
+                    &mut files_map,
+                    &mut pf,
+                )
+                .await;
+            }
+        }
+    }
+}
+
 // From the provided list of local files paths, find the local changes made in comparison with the
 // target FilesContainer, uploading new files as necessary, and creating a new FilesMap with file's
 // metadata and their corresponding links, as well as generating the report of processed files
@@ -1066,6 +1114,16 @@ async fn files_map_sync(
         // Let's update FileItem if there is a change or it doesn't exist in current_files_map
         match current_files_map.get(&normalised_file_name) {
             None => {
+                // ensure each component of dest_base_path is added to FilesMap as a directory.
+                add_dirs_to_files_map(
+                    safe,
+                    &normalised_file_name,
+                    &mut updated_files_map,
+                    true,
+                    dry_run,
+                )
+                .await;
+
                 // We need to add a new FileItem
                 if add_or_update_file_item(
                     safe,
@@ -1598,6 +1656,9 @@ async fn files_map_create(
 
     let (location_base_path, dest_base_path) = get_base_paths(location, dest_path)?;
 
+    // ensure each component of dest_base_path is added to FilesMap as a directory.
+    add_dirs_to_files_map(safe, &dest_base_path, &mut files_map, false, dry_run).await;
+
     // We want to iterate over the BTreeMap and also modify it.
     // We DON'T want to clone/dup the whole thing, might be very big.
     // Rust doesn't allow that exactly, but we can get the keys
@@ -1663,8 +1724,16 @@ mod tests {
         let second_xorurl = XorUrlEncoder::from_url("safe://second_xorurl")?.to_xorurl_string();
 
         processed_files.insert(
+            "../testdata".to_string(),
+            (CONTENT_ADDED_SIGN.to_string(), "".to_string()),
+        );
+        processed_files.insert(
             "../testdata/test.md".to_string(),
             (CONTENT_ADDED_SIGN.to_string(), first_xorurl.clone()),
+        );
+        processed_files.insert(
+            "../testdata/subfolder".to_string(),
+            (CONTENT_ADDED_SIGN.to_string(), "".to_string()),
         );
         processed_files.insert(
             "../testdata/subfolder/subexists.md".to_string(),
@@ -1679,7 +1748,8 @@ mod tests {
             false,
         )
         .await?;
-        assert_eq!(files_map.len(), 2);
+        println!("{:#?}", files_map);
+        assert_eq!(files_map.len(), 4);
         let file_item1 = &files_map["/testdata/test.md"];
         assert_eq!(file_item1[FAKE_RDF_PREDICATE_LINK], first_xorurl);
         assert_eq!(file_item1[FAKE_RDF_PREDICATE_TYPE], "text/markdown");
@@ -1919,7 +1989,8 @@ mod tests {
 
         assert!(xorurl.starts_with("safe://"));
         assert_eq!(processed_files.len(), TESTDATA_NO_SLASH_PUT_FILEITEM_COUNT);
-        assert_eq!(files_map.len(), TESTDATA_NO_SLASH_PUT_FILEITEM_COUNT);
+        // file count + 1 for the /myroot/ dest path.
+        assert_eq!(files_map.len(), TESTDATA_NO_SLASH_PUT_FILEITEM_COUNT + 1);
 
         let filename1 = "../testdata/test.md";
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
@@ -2395,6 +2466,7 @@ mod tests {
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
         let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
         xorurl_encoder.set_path("path/when/sync");
+        let prefix_path_len = 3; // path/when/sync
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
                 "../testdata/subfolder",
@@ -2414,7 +2486,8 @@ mod tests {
         );
         assert_eq!(
             new_files_map.len(),
-            TESTDATA_PUT_FILEITEM_COUNT + SUBFOLDER_NO_SLASH_PUT_FILEITEM_COUNT
+            // the -1 is because the final prefix path component is counted in SUBFOLDER_NO_SLASH_PUT_FILEITEM_COUNT
+            TESTDATA_PUT_FILEITEM_COUNT + SUBFOLDER_NO_SLASH_PUT_FILEITEM_COUNT + prefix_path_len - 1
         );
 
         let filename1 = "../testdata/test.md";
@@ -2466,6 +2539,7 @@ mod tests {
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
         let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
         xorurl_encoder.set_path("/path/when/sync/");
+        let prefix_path_len = 3; // path/when/sync
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
                 "../testdata/subfolder",
@@ -2485,7 +2559,8 @@ mod tests {
         );
         assert_eq!(
             new_files_map.len(),
-            TESTDATA_PUT_FILEITEM_COUNT + SUBFOLDER_NO_SLASH_PUT_FILEITEM_COUNT
+            // the -1 is because the final prefix path component is counted in SUBFOLDER_NO_SLASH_PUT_FILEITEM_COUNT
+            TESTDATA_PUT_FILEITEM_COUNT + SUBFOLDER_NO_SLASH_PUT_FILEITEM_COUNT + prefix_path_len - 1
         );
 
         let filename1 = "../testdata/test.md";
