@@ -16,10 +16,9 @@ mod shared;
 mod update;
 
 use errors::{Error, Result};
-use log::debug;
-use log::error;
-use std::path::PathBuf;
-use std::process;
+use log::{debug, error};
+use operations::{restart_authd, start_authd, stop_authd};
+use std::{path::PathBuf, process};
 use structopt::{self, StructOpt};
 use update::update_commander;
 
@@ -28,8 +27,6 @@ extern crate human_panic;
 
 #[macro_use]
 extern crate self_update;
-
-use operations::{restart_authd, start_authd, stop_authd};
 
 #[derive(StructOpt, Debug)]
 /// SAFE Authenticator daemon subcommands
@@ -51,7 +48,7 @@ enum CmdArgs {
         #[structopt(long = "stateless-retry")]
         stateless_retry: bool,
         /// Address to listen on
-        #[structopt(long = "listen", default_value = "https://localhost:33000")]
+        #[structopt(long = "listen", default_value = "localhost:33000")]
         listen: String,
         /// Path where to store authd log files (default ~/.safe/authd/logs/)
         #[structopt(long = "log-dir")]
@@ -71,7 +68,7 @@ enum CmdArgs {
     #[structopt(name = "restart")]
     Restart {
         /// Address to listen on
-        #[structopt(long = "listen", default_value = "https://localhost:33000")]
+        #[structopt(long = "listen", default_value = "localhost:33000")]
         listen: String,
         /// Path where to store authd log files (default ~/.safe/authd/logs/)
         #[structopt(long = "log-dir")]
@@ -94,6 +91,7 @@ async fn main() {
     debug!("Running authd with options: {:?}", opt);
 
     if let Err(err) = process_command(opt).await {
+        println!("sn_authd error: {}", err);
         error!("sn_authd error: {}", err);
         process::exit(err.error_code());
     }

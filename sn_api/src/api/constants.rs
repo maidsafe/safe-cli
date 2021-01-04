@@ -8,7 +8,7 @@
 // Software.
 
 // Default host of the authenticator endpoint to send the requests to
-pub const SN_AUTHD_ENDPOINT_HOST: &str = "https://localhost";
+pub const SN_AUTHD_ENDPOINT_HOST: &str = "localhost";
 // Default authenticator port number where to send requests to
 pub const SN_AUTHD_ENDPOINT_PORT: u16 = 33000;
 

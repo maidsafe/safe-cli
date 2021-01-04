@@ -17,6 +17,7 @@ use log::{self, debug, info, Record};
 use std::{
     fs::{create_dir_all, File, OpenOptions},
     io::{self, prelude::*},
+    net::{SocketAddr, ToSocketAddrs},
     path::PathBuf,
     process::{self, Command, Stdio},
     str, thread,
@@ -28,8 +29,23 @@ const DEFAULT_LOG_LEVEL: &str = "info";
 
 pub async fn start_authd(listen: &str, log_dir: Option<PathBuf>, foreground: bool) -> Result<()> {
     if foreground {
+        // Parse the listen arg to a SocketAddr
+        let listen_addr = listen
+            .to_socket_addrs()
+            .map_err(|err| {
+                Error::GeneralError(format!(
+                    "Failed to parse listening address '{}': {}",
+                    listen, err
+                ))
+            })?
+            .next()
+            .ok_or(Error::GeneralError(format!(
+                "Failed to obtain listening address from: {}",
+                listen
+            )))?;
+
         // Let's run it as a normal process in the foreground
-        run_in_foreground(listen, log_dir).await
+        run_in_foreground(&listen_addr, log_dir).await
     } else {
         // Run it as a daemon, i.e. a detached process in the background
         launch_detached_process(listen, log_dir)
@@ -109,7 +125,7 @@ pub async fn restart_authd(listen: &str, log_dir: Option<PathBuf>, foreground: b
 
 // Private functions
 
-async fn run_in_foreground(listen: &str, log_dir: Option<PathBuf>) -> Result<()> {
+async fn run_in_foreground(listen_addr: &SocketAddr, log_dir: Option<PathBuf>) -> Result<()> {
     let log_path = get_authd_log_path(log_dir.clone())?;
     let authd_exec = std::env::current_exe()?;
 
@@ -176,7 +192,7 @@ async fn run_in_foreground(listen: &str, log_dir: Option<PathBuf>) -> Result<()>
             })?;
 
             info!("Initialising SAFE Authenticator services...");
-            authd_run(listen, None, None).await?;
+            authd_run(listen_addr, None, None).await?;
 
             // Release PID file lock (this is done automatically anyways if process is killed)
             drop(pid_file);
