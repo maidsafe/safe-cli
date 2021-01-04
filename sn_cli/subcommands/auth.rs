@@ -12,7 +12,7 @@ use log::debug;
 use sn_api::{AuthReq, Safe, SafeAuthdClient};
 use structopt::StructOpt;
 
-const AUTH_REQ_NOTIFS_ENDPOINT: &str = "https://localhost:33002";
+const AUTH_REQ_NOTIFS_ENDPOINT: &str = "localhost:33002";
 
 #[derive(StructOpt, Debug)]
 pub enum AuthSubCommands {

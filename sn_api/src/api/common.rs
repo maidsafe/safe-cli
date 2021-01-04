@@ -128,7 +128,7 @@ where
 
             // Establish a new connection
             outgoing_conn
-                .connect(dest_endpoint, None)
+                .connect(&format!("https://{}", dest_endpoint), None)
                 .await
                 .map_err(|err| {
                     Error::AuthdClientError(format!(

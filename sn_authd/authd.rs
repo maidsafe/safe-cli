@@ -14,14 +14,13 @@ use futures::{lock::Mutex, TryFutureExt};
 use log::{error, info};
 use qjsonrpc::{Endpoint, IncomingJsonRpcRequest, JsonRpcRequest, JsonRpcResponseStream};
 use sn_api::SafeAuthenticator;
-use std::{collections::BTreeMap, str, sync::Arc};
-use url::Url;
+use std::{collections::BTreeMap, net::SocketAddr, str, sync::Arc};
 
 // Number of milliseconds to allow an idle connection before closing it
 const CONNECTION_IDLE_TIMEOUT: u64 = 120_000;
 
 pub async fn run(
-    listen: &str,
+    listen_addr: &SocketAddr,
     cert_base_path: Option<&str>,
     config_dir_path: Option<&str>,
 ) -> Result<()> {
@@ -50,7 +49,7 @@ pub async fn run(
     )?;
 
     start_listening(
-        listen,
+        listen_addr,
         &base_path,
         Some(CONNECTION_IDLE_TIMEOUT),
         safe_auth_handle,
@@ -63,25 +62,20 @@ pub async fn run(
 // Private helpers
 
 async fn start_listening(
-    listen: &str,
+    listen_addr: &SocketAddr,
     cert_base_path: &str,
     idle_timeout: Option<u64>,
     safe_auth_handle: SharedSafeAuthenticatorHandle,
     auth_reqs_handle: SharedAuthReqsHandle,
     notif_endpoints_handle: SharedNotifEndpointsHandle,
 ) -> Result<()> {
-    let listen_socket_addr = Url::parse(listen)
-        .map_err(|_| Error::GeneralError("Invalid endpoint address".to_string()))?
-        .socket_addrs(|| None)
-        .map_err(|_| Error::GeneralError("Invalid endpoint address".to_string()))?[0];
-
     let qjsonrpc_endpoint = Endpoint::new(cert_base_path, idle_timeout)
         .map_err(|err| Error::GeneralError(format!("Failed to create endpoint: {}", err)))?;
 
     let mut incoming_conn = qjsonrpc_endpoint
-        .bind(&listen_socket_addr)
+        .bind(&listen_addr)
         .map_err(|err| Error::GeneralError(format!("Failed to bind endpoint: {}", err)))?;
-    info!("Listening on {}", listen_socket_addr);
+    info!("Listening on {}", listen_addr);
 
     // Let's spawn a task which will monitor pending auth reqs
     // and get them allowed/denied by the user using any of the subcribed endpoints

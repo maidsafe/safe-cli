@@ -21,11 +21,6 @@ const COIN_TO_RAW_CONVERSION: u64 = 1_000_000_000;
 // The maximum amount of safecoin that can be represented by a single `Money`
 const MAX_COINS_VALUE: u64 = (u32::max_value() as u64 + 1) * COIN_TO_RAW_CONVERSION - 1;
 
-#[allow(dead_code)]
-pub fn vec_to_hex(hash: Vec<u8>) -> String {
-    hash.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
 pub fn xorname_to_hex(xorname: &XorName) -> String {
     xorname.0.iter().map(|b| format!("{:02x}", b)).collect()
 }

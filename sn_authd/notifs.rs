@@ -183,11 +183,11 @@ async fn jsonrpc_send(
             .map_err(|err| format!("Failed to bind endpoint: {}", err))?
     };
 
-    let url2 = url.to_string();
-    let method2 = method.to_string();
-    let mut new_conn = outgoing_conn.connect(&url2, None).await?;
+    let mut new_conn = outgoing_conn
+        .connect(&format!("https://{}", url), None)
+        .await?;
 
-    let response = new_conn.send::<Option<bool>>(&method2, params).await;
+    let response = new_conn.send::<Option<bool>>(method, params).await;
 
     // Allow the endpoint driver to automatically shut down
     drop(outgoing_conn);

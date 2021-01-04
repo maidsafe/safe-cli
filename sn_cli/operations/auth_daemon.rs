@@ -19,7 +19,7 @@ use sn_api::{
 use std::convert::From;
 use std::{fs::File, path::PathBuf};
 
-const AUTH_REQS_NOTIFS_ENDPOINT: &str = "https://localhost:33001";
+const AUTH_REQS_NOTIFS_ENDPOINT: &str = "localhost:33001";
 const ENV_VAR_SN_AUTHD_PATH: &str = "SN_AUTHD_PATH";
 
 #[cfg(not(target_os = "windows"))]
