@@ -12,6 +12,7 @@ env:
 
 jobs:
   build-cli-authd:
+    if: ${{ github.repository_owner == 'maidsafe' }}
     name: Build Component
     runs-on: ${{ matrix.os }}
     strategy:
@@ -22,11 +23,11 @@ jobs:
           - os: ubuntu-latest
             component: sn_cli
             target: safe
-            output: safe-x86_64-unknown-linux-gnu
+            output: safe-x86_64-unknown-linux-musl
           - os: ubuntu-latest
             component: sn_authd
             target: sn_authd
-            output: sn_authd-x86_64-unknown-linux-gnu
+            output: sn_authd-x86_64-unknown-linux-musl
           - os: windows-latest
             component: sn_cli
             target: safe.exe
@@ -54,12 +55,31 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
 
-      # Build
-      - name: Build
+      # Build on Ubuntu
+      - name: Build Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo apt update -y && sudo apt install -y musl-tools
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --release --manifest-path=${{ matrix.component }}/Cargo.toml --target x86_64-unknown-linux-musl
+
+      # Build on Windows
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
         run: cargo build --release --manifest-path=${{ matrix.component }}/Cargo.toml
 
-      # Upload
-      - name: Upload
+      # Upload Ubuntu
+      - name: Upload Ubuntu Builds
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.output }}
+          path: target/x86_64-unknown-linux-musl/release/${{ matrix.target }}
+      
+      # Upload Windows
+      - name: Upload Windows Builds
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@master
         with:
           name: ${{ matrix.output }}
@@ -67,6 +87,7 @@ jobs:
 
   
   build-mac-cli-authd:
+    if: ${{ github.repository_owner == 'maidsafe' }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -133,6 +154,7 @@ jobs:
   # 'download-artifact' actions. We could perhaps implement our own 'retrieve all build artifacts'
   # action.
   deploy:
+    if: ${{ github.repository_owner == 'maidsafe' }}
     name: Deploy
     runs-on: ubuntu-latest
     needs: [build-cli-authd, build-mac-cli-authd]
@@ -151,11 +173,11 @@ jobs:
         with:
           name: safe-x86_64-pc-windows-msvc
           path: artifacts/sn_cli/prod/x86_64-pc-windows-msvc/release
-      - name: Download safe-x86_64-unknown-linux-gnu release
+      - name: Download safe-x86_64-unknown-linux-musl release
         uses: actions/download-artifact@master
         with:
-          name: safe-x86_64-unknown-linux-gnu
-          path: artifacts/sn_cli/prod/x86_64-unknown-linux-gnu/release
+          name: safe-x86_64-unknown-linux-musl
+          path: artifacts/sn_cli/prod/x86_64-unknown-linux-musl/release
       - name: Download safe-x86_64-apple-darwin release
         uses: actions/download-artifact@master
         with:
@@ -168,18 +190,16 @@ jobs:
         with:
           name: sn_authd-x86_64-pc-windows-msvc
           path: artifacts/sn_authd/prod/x86_64-pc-windows-msvc/release
-      - name: Download sn_authd-x86_64-unknown-linux-gnu release
+      - name: Download sn_authd-x86_64-unknown-linux-musl release
         uses: actions/download-artifact@master
         with:
-          name: sn_authd-x86_64-unknown-linux-gnu
-          path: artifacts/sn_authd/prod/x86_64-unknown-linux-gnu/release
+          name: sn_authd-x86_64-unknown-linux-musl
+          path: artifacts/sn_authd/prod/x86_64-unknown-linux-musl/release
       - name: Download sn_authd-x86_64-apple-darwin release
         uses: actions/download-artifact@master
         with:
           name: sn_authd-x86_64-apple-darwin
           path: artifacts/sn_authd/prod/x86_64-apple-darwin/release
-
-
 
       # Get information for the release.
       - shell: bash
@@ -240,8 +260,8 @@ jobs:
       - uses: actions/upload-release-asset@v1.0.1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: deploy/prod/sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-gnu.zip
-          asset_name: sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-gnu.zip
+          asset_path: deploy/prod/sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-musl.zip
+          asset_name: sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-musl.zip
           asset_content_type: application/zip
         if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
       - uses: actions/upload-release-asset@v1.0.1
@@ -261,8 +281,8 @@ jobs:
       - uses: actions/upload-release-asset@v1.0.1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: deploy/prod/sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-gnu.tar.gz
-          asset_name: sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-gnu.tar.gz
+          asset_path: deploy/prod/sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-musl.tar.gz
+          asset_name: sn_cli-${{ steps.versioning.outputs.cli_version }}-x86_64-unknown-linux-musl.tar.gz
           asset_content_type: application/zip
         if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
       - uses: actions/upload-release-asset@v1.0.1
@@ -282,6 +302,7 @@ jobs:
 
   # Automatic publish, triggered by a commit starting with "Version change".
   publish:
+    if: ${{ github.repository_owner == 'maidsafe' }}
     name: Publish
     needs: deploy
     runs-on: ubuntu-latest
