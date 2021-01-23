@@ -9,7 +9,7 @@ keywords = ["quic"]
 edition = "2018"
 
 [lib]
-path = "lib.rs"
+path = "src/lib.rs"
 
 [dependencies]
 dirs-next = "1.0.1"
