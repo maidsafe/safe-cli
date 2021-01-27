@@ -6,11 +6,9 @@
 // kind, either express or implied. please review the licences for the specific language governing
 // permissions and limitations relating to use of the safe network software.
 
-/**
- * A module for outward-facing response types and constants
- * that the server and client can use directly.
- * Also includes enumeration of error codes.
- */
+///! A module for outward-facing response types and constants
+///! that the server and client can use directly.
+///! Also includes enumeration of error codes.
 use serde::{Deserialize, Serialize};
 
 // JSON-RPC error codes as defined at https://www.jsonrpc.org/specification#response_object
