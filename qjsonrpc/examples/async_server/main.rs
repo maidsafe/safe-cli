@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
         let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
         println!("[client] connected to {}", listen);
         let ack = out_jsonrpc_req
-            .send::<Response>("ping", json!(null))
+            .send::<Response>(METHOD_PING, json!(null))
             .await?;
         println!("[client] sent ping to and received response {:?}", ack);
 
@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
         let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
         println!("[client] connected to {}", listen);
         let ack = out_jsonrpc_req
-            .send::<Response>("shutdown", json!(null))
+            .send::<Response>(METHOD_SHUTDOWN, json!(null))
             .await?;
         println!("[client] shutdown sent and received response {:?}", ack);
 

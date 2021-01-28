@@ -6,12 +6,12 @@
 // kind, either express or implied. please review the licences for the specific language governing
 // permissions and limitations relating to use of the safe network software.
 
-///! A module for stream types returned by the daemon server.
+///! A module for stream types returned populated by the rpc daemon.
 ///! `QueryStream` is a buffered stream for incoming queries
 ///! that have been pre-parsed by the daemon. `ResponseStream`
-///! is another buffered stream returned by `QueryStream`
-///! along with each query. It must be used by a
-///! server process to buffer responses to a query.
+///! is another buffered stream returned by `QueryStream`,
+///! along with each query. It is used by a
+///! server to buffer responses back to the rpc daemon.
 ///!
 ///! Finally, this also provides the Container<T> type
 ///! which is used internally by the rpc daemon to keep track
@@ -35,7 +35,7 @@ use tokio::sync::mpsc;
 // ====================================
 
 /// An outward facing stream which yields queries
-/// parsed from JsonRpcRequests and an associated `ResponseStream`
+/// parsed from `JsonRpcRequest`s and an associated `ResponseStream`
 pub struct QueryStream {
     /// Buffered stream for outgoing responses
     response_tx: mpsc::UnboundedSender<ResponseContainer>,
@@ -109,7 +109,7 @@ impl ResponseStream {
     ///         This case isn't possible because it only exits
     ///         when all senders (like this stream) are dropped
     ///     b) You somehow got a `ResponseStream` that wasn't
-    ///        constructed yielded from a `QueryStream` (also not possible)
+    ///        yielded from a `QueryStream` (also not possible)
     pub fn send_oneshot(mut self, res: Result<Response>) {
         self.was_consumed = true;
         let container = ResponseContainer::new(res, self.id);
@@ -134,9 +134,9 @@ impl Drop for ResponseStream {
 pub type QueryContainer = Container<Query>;
 pub type ResponseContainer = Container<Result<Response>>;
 
-/// A container type used internally by the QueryStream
-/// and Response Stream which tags messages passing through
-/// with metadata so that the server service and the client
+/// A container type used internally by the `QueryStream`
+/// and `ResponseStream` which tags messages
+/// with metadata so that the server and the client
 /// need not worry about them directly.
 ///
 /// Implementation Note on the id field:

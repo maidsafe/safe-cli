@@ -75,7 +75,7 @@ impl RpcDaemon {
     /// This will loop, servicing incoming requests from
     /// clients and responses from the server.
     /// The function returns when it detects that
-    /// the QueryStream associated with `self` (created along with
+    /// the `QueryStream` associated with `self` (created along with
     /// `self` using `rpc_daemon()`) and all
     /// outstanding `ResponseStream`s are dropped.
     pub async fn run<P: AsRef<Path>>(
@@ -84,12 +84,12 @@ impl RpcDaemon {
         cert_base_path: Option<P>,
         idle_timeout: Option<u64>,
     ) -> Result<()> {
-        // use the default ~/.safe/node_rpc if no path specified
+        // use the default ~/.safe/async_server_example if no path specified
         let base_path = cert_base_path.map_or_else(
             || match dirs_next::home_dir() {
                 Some(mut path) => {
                     path.push(".safe");
-                    path.push("simple_server_example");
+                    path.push("async_server_example");
                     Ok(path)
                 }
                 None => Err(Error::GeneralError(
