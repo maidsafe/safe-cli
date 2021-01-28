@@ -308,7 +308,7 @@ fn validate_nrs_name(name: &str) -> Result<(XorUrlEncoder, String)> {
     let xorurl_encoder = Safe::parse_url(&sanitised_url)?;
     if xorurl_encoder.content_version().is_some() {
         return Err(Error::InvalidInput(format!(
-            "The NRS name/subname URL cannot cannot contain a version: {}",
+            "The NRS name/subname URL cannot contain a version: {}",
             sanitised_url
         )));
     };
@@ -454,7 +454,7 @@ mod tests {
             Err(err) => assert_eq!(
                 err,
                 Error::InvalidInput(format!(
-                    "The NRS name/subname URL cannot cannot contain a version: {}",
+                    "The NRS name/subname URL cannot contain a version: {}",
                     versioned_sitename
                 ))
             ),
@@ -471,7 +471,7 @@ mod tests {
                 assert_eq!(
                     err,
                     Error::InvalidInput(format!(
-                        "The NRS name/subname URL cannot cannot contain a version: {}",
+                        "The NRS name/subname URL cannot contain a version: {}",
                         versioned_sitename
                     ))
                 );
