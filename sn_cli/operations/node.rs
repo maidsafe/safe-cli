@@ -76,6 +76,7 @@ pub fn node_install(node_path: Option<PathBuf>) -> Result<(), String> {
         } else {
             None
         },
+        Some("latest"),
     )?;
     Ok(())
 }

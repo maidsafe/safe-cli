@@ -52,7 +52,14 @@ pub fn authd_install(_authd_path: Option<String>) -> Result<(), String> {
 #[cfg(feature = "self-update")]
 pub fn authd_install(authd_path: Option<String>) -> Result<(), String> {
     let target_path = get_authd_bin_path(authd_path)?;
-    download_from_s3_and_install_bin(target_path, "sn-api", "sn_authd", SN_AUTHD_EXECUTABLE, None)?;
+    download_from_s3_and_install_bin(
+        target_path,
+        "sn-api",
+        "sn_authd",
+        SN_AUTHD_EXECUTABLE,
+        None,
+        None,
+    )?;
     Ok(())
 }
 

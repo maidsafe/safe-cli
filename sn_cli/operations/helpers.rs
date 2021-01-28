@@ -22,11 +22,17 @@ pub fn download_from_s3_and_install_bin(
     asset_prefix: &str,
     exec_file_name: &str,
     target_platform: Option<&str>,
+    target_version: Option<&str>,
 ) -> Result<String, String> {
-    let target = target_platform.unwrap_or_else(|| self_update::get_target());
-    let available_releases = self_update::backends::s3::Update::configure()
+    let mut update_builder = self_update::backends::s3::Update::configure();
+    if let Some(version) = target_version {
+        update_builder.target_version_tag(version);
+    }
+
+    let target_platform = target_platform.unwrap_or_else(|| self_update::get_target());
+    let available_releases = update_builder
         .bucket_name(bucket)
-        .target(&target)
+        .target(&target_platform)
         .asset_prefix(asset_prefix)
         .region("eu-west-2")
         .bin_name("")
@@ -39,7 +45,12 @@ pub fn download_from_s3_and_install_bin(
             )
         })?;
 
-    download_and_install_bin(target_path, target, available_releases, exec_file_name)
+    download_and_install_bin(
+        target_path,
+        target_platform,
+        available_releases,
+        exec_file_name,
+    )
 }
 
 // Private helpers
