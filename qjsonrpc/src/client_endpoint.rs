@@ -19,6 +19,9 @@ use std::{
 };
 use url::Url;
 
+#[cfg(feature = "typesafe-params")]
+use super::JsonRpcParams;
+
 // JSON-RPC over QUIC client endpoint
 pub struct ClientEndpoint {
     config: quinn::ClientConfig,
@@ -168,11 +171,32 @@ impl OutgoingJsonRpcRequest {
     where
         T: DeserializeOwned,
     {
+        let jsonrpc_req = JsonRpcRequest::new(method, params);
+        self.send_request(jsonrpc_req).await
+    }
+
+    // Send a JSON_RPC request to the remote peer on current QUIC connection,
+    // awaiting for a JSON-RPC response which result is of type T: StructuredResponse
+    // Unlike the normal `send()`, this performs compile-time type checking on the parameters
+    // request: a qjsonrpc structured request
+    #[cfg(feature = "typesafe-params")]
+    pub async fn send_checked<T, P>(&mut self, request: P) -> Result<T>
+    where
+        T: DeserializeOwned,
+        P: JsonRpcParams,
+    {
+        self.send_request(request.into()).await
+    }
+
+    // The driver function for `send()` and `send_check()` which does the lifting
+    // of sending the JSON_RPC request to the remote peer on the current QUIC connection,
+    async fn send_request<T>(&mut self, jsonrpc_req: JsonRpcRequest) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let (mut send, recv) = self.quinn_connection.open_bi().await.map_err(|err| {
             Error::ClientError(format!("Failed to open communication stream: {}", err))
         })?;
-
-        let jsonrpc_req = JsonRpcRequest::new(method, params);
 
         let serialised_req = serde_json::to_string(&jsonrpc_req).map_err(|err| {
             Error::ClientError(format!("Failed to serialise request to be sent: {}", err))

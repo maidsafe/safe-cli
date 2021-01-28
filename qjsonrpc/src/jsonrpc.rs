@@ -11,6 +11,9 @@ use super::Error;
 use rand::{self, Rng};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(feature = "typesafe-params")]
+use std::convert::From;
+
 type Result<T> = std::result::Result<T, Error>;
 
 // Version of the JSON-RPC used in the requests
@@ -36,6 +39,27 @@ impl JsonRpcRequest {
             params,
             id: rand::thread_rng().gen_range(0, std::u32::MAX) + 1,
         }
+    }
+}
+
+/// Trait used to associate parameter types with request
+/// method strings as a method of convenient debugging.
+#[cfg(feature = "typesafe-params")]
+pub trait JsonRpcParams: serde::ser::Serialize + DeserializeOwned {
+    /// return the method name for requests
+    /// of this parameter type
+    fn method(&self) -> &'static str;
+}
+
+#[cfg(feature = "typesafe-params")]
+impl<T> From<T> for JsonRpcRequest
+where
+    T: JsonRpcParams,
+{
+    /// Blanket implementation to allow extending From
+    fn from(params: T) -> Self {
+        let method = params.method().to_owned();
+        Self::new(&method, serde_json::json!(params))
     }
 }
 

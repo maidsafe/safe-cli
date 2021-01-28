@@ -17,6 +17,8 @@ const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-24"];
 
 pub use client_endpoint::ClientEndpoint;
 pub use errors::{Error, Result};
+pub use jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 pub use server_endpoint::{Endpoint, IncomingConn, IncomingJsonRpcRequest, JsonRpcResponseStream};
 
-pub use jsonrpc::{JsonRpcRequest, JsonRpcResponse};
+#[cfg(feature = "typesafe-params")]
+pub use jsonrpc::JsonRpcParams;
