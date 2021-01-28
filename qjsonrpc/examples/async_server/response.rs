@@ -14,15 +14,19 @@ use serde::{Deserialize, Serialize};
 // JSON-RPC error codes as defined at https://www.jsonrpc.org/specification#response_object
 
 pub const JSONRPC_METHOD_NOT_FOUND: isize = -32601;
+pub const JSONRPC_INVALID_PARAMS: isize = -32602;
 pub const JSONRPC_ASYNC_SERVER_ERROR: isize = -320099;
 
 /// Outward-facing succesful responses types
 /// for use by client and server while communicating
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Response {
-    /// Acknowledge a shutdown
-    AckShutdown,
-
     /// Acknowledge a ping
     AckPing,
+
+    /// echo data sent by a ping with args
+    Echo(u32),
+
+    /// Acknowledge a shutdown
+    AckShutdown,
 }

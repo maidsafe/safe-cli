@@ -23,7 +23,7 @@ use tempfile::tempdir;
 /// The client pings the server by first sending a 'ping' request to the rpc interface service,
 /// which forwards the ping to the server itself.
 /// The server tells the interface to respond with an ACK, which the rpc interface forwards to the client.
-/// A similar flow is then used to send a shutdown signal. When the QueryStream is dropped,
+/// A similar flow is then used to send a ping with parameters and a shutdown signal. When the QueryStream is dropped,
 /// the rpc service knows it's time to shut down, and does so automatically too by returning
 /// from run().
 ///
@@ -52,7 +52,18 @@ async fn main() -> Result<()> {
         let ack = out_jsonrpc_req
             .send::<Response>(METHOD_PING, json!(null))
             .await?;
-        println!("[client] sent ping to and received response {:?}", ack);
+        println!("[client] ping sent and received response {:?}\n", ack);
+
+        // try ping with args
+        let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
+        println!("[client] connected to {}", listen);
+        let ack = out_jsonrpc_req
+            .send::<Response>(METHOD_ECHO, json!(42u32))
+            .await?;
+        println!(
+            "[client] echo request sent and received response {:?}\n",
+            ack
+        );
 
         // try remote shutdown
         let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
@@ -60,7 +71,7 @@ async fn main() -> Result<()> {
         let ack = out_jsonrpc_req
             .send::<Response>(METHOD_SHUTDOWN, json!(null))
             .await?;
-        println!("[client] shutdown sent and received response {:?}", ack);
+        println!("[client] shutdown sent and received response {:?}\n", ack);
 
         let res: Result<()> = Ok(());
         res
@@ -81,6 +92,7 @@ async fn main() -> Result<()> {
             println!("[server]: query {:?} received", &query);
             let resp = match &query {
                 Query::Ping => Ok(Response::AckPing),
+                Query::Echo(num) => Ok(Response::Echo(*num)),
                 Query::Shutdown => {
                     done = true;
                     Ok(Response::AckShutdown)

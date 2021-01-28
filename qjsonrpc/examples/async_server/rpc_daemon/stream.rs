@@ -196,6 +196,19 @@ impl TryFrom<JsonRpcRequest> for QueryContainer {
     fn try_from(request: JsonRpcRequest) -> std::result::Result<Self, Self::Error> {
         match request.method.as_str() {
             METHOD_PING => Ok(QueryContainer::new(Query::Ping, request.id)),
+
+            METHOD_ECHO => {
+                let maybe_num = serde_json::from_value::<u32>(request.params);
+                match maybe_num {
+                    Ok(num) => Ok(QueryContainer::new(Query::Echo(num), request.id)),
+                    Err(e) => Err(JsonRpcResponse::error(
+                        e.to_string(),
+                        JSONRPC_INVALID_PARAMS,
+                        Some(request.id),
+                    )),
+                }
+            }
+
             METHOD_SHUTDOWN => Ok(QueryContainer::new(Query::Shutdown, request.id)),
             other => {
                 let msg = format!("Method '{}' not supported or unknown by the server", other);

@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 /// method string used to request a ping
 pub const METHOD_PING: &str = "ping";
 
+/// method string used to ask for an echo of the arguments
+pub const METHOD_ECHO: &str = "echo";
+
 /// method string used to request a remote shutdown
 pub const METHOD_SHUTDOWN: &str = "shutdown";
 
@@ -23,6 +26,9 @@ pub const METHOD_SHUTDOWN: &str = "shutdown";
 pub enum Query {
     /// Ping the node
     Ping,
+
+    /// Ask the node to echo a number back to you
+    Echo(u32),
 
     /// Shutdown the node
     Shutdown,
