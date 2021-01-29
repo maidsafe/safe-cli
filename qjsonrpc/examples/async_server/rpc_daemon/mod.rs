@@ -28,12 +28,7 @@ pub use stream::{QueryStream, ResponseStream};
 use qjsonrpc::{
     Endpoint, Error, IncomingJsonRpcRequest, JsonRpcResponse, JsonRpcResponseStream, Result,
 };
-use std::{
-    collections::HashMap,
-    convert::TryFrom,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{collections::HashMap, convert::TryFrom, path::Path, sync::Arc};
 use stream::{QueryContainer, ResponseContainer};
 use tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -46,6 +41,9 @@ use url::Url;
 /// client and the server to abstract out
 /// the `qjsonrpc` internals
 pub struct RpcDaemon {
+    /// Underlying qjsonrpc Endpoint
+    endpoint: Endpoint,
+
     /// stream to buffer queries to the server
     query_tx: UnboundedSender<QueryContainer>,
 
@@ -59,16 +57,20 @@ pub struct RpcDaemon {
 impl RpcDaemon {
     /// ctor
     /// Don't use this directly. Instead see `rpc_daemon()`
-    fn new(
+    fn new<P: AsRef<Path>>(
+        cert_base_path: P,
+        idle_timeout: Option<u64>,
         query_tx: UnboundedSender<QueryContainer>,
         response_rx: UnboundedReceiver<ResponseContainer>,
-    ) -> Self {
+    ) -> Result<Self> {
+        let endpoint = Endpoint::new(cert_base_path, idle_timeout)?;
         let open_streams = Arc::new(Mutex::new(HashMap::new()));
-        Self {
+        Ok(Self {
+            endpoint,
             query_tx,
             response_rx,
             open_streams,
-        }
+        })
     }
 
     /// Runs the service on the current thread
@@ -78,42 +80,15 @@ impl RpcDaemon {
     /// the `QueryStream` associated with `self` (created along with
     /// `self` using `rpc_daemon()`) and all
     /// outstanding `ResponseStream`s are dropped.
-    pub async fn run<P: AsRef<Path>>(
-        &mut self,
-        listen_addr_raw: &str,
-        cert_base_path: Option<P>,
-        idle_timeout: Option<u64>,
-    ) -> Result<()> {
-        // use the default ~/.safe/async_server_example if no path specified
-        let base_path = cert_base_path.map_or_else(
-            || match dirs_next::home_dir() {
-                Some(mut path) => {
-                    path.push(".safe");
-                    path.push("async_server_example");
-                    Ok(path)
-                }
-                None => Err(Error::GeneralError(
-                    "Failed to obtain local project directory where to write certificate from"
-                        .to_string(),
-                )),
-            },
-            |path| {
-                let mut pathbuf = PathBuf::new();
-                pathbuf.push(path);
-                Ok(pathbuf)
-            },
-        )?;
-
+    pub async fn run(&mut self, listen_addr_raw: &str) -> Result<()> {
         // parse and bind the socket address
         let listen_socket_addr = Url::parse(listen_addr_raw)
             .map_err(|_| Error::GeneralError("Invalid endpoint address".to_string()))?
             .socket_addrs(|| None)
             .map_err(|_| Error::GeneralError("Invalid endpoint address".to_string()))?[0];
 
-        let qjsonrpc_endpoint = Endpoint::new(base_path, idle_timeout)
-            .map_err(|err| Error::GeneralError(format!("Failed to create endpoint: {}", err)))?;
-
-        let mut incoming_conn = qjsonrpc_endpoint
+        let mut incoming_conn = self
+            .endpoint
             .bind(&listen_socket_addr)
             .map_err(|err| Error::GeneralError(format!("Failed to bind endpoint: {}", err)))?;
         println!("[rpc daemon] Listening on {}", listen_socket_addr);
@@ -231,10 +206,13 @@ impl RpcDaemon {
 
 /// Initializes a new RpcDaemon object and gives back a stream for
 /// server internal queries coming from it
-pub fn rpc_daemon() -> (RpcDaemon, QueryStream) {
+pub fn rpc_daemon<P: AsRef<Path>>(
+    cert_base_dir: P,
+    idle_timeout: Option<u64>,
+) -> Result<(RpcDaemon, QueryStream)> {
     let (query_tx, query_rx) = unbounded_channel::<QueryContainer>();
     let (response_tx, response_rx) = unbounded_channel::<ResponseContainer>();
-    let daemon = RpcDaemon::new(query_tx, response_rx);
+    let daemon = RpcDaemon::new(cert_base_dir, idle_timeout, query_tx, response_rx)?;
     let query_stream = QueryStream::new(response_tx, query_rx);
-    (daemon, query_stream)
+    Ok((daemon, query_stream))
 }

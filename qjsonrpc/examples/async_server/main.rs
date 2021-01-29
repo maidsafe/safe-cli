@@ -16,8 +16,11 @@ pub use response::*;
 use qjsonrpc::{ClientEndpoint, Error, Result};
 use rpc_daemon::rpc_daemon;
 use serde_json::json;
-use std::{path::PathBuf, sync::Arc};
 use tempfile::tempdir;
+
+// hyper params
+const LISTEN: &str = "https://localhost:33001";
+const TIMEOUT_MS: u64 = 10000;
 
 ///  Sets up a minimal client, a fake server process, and an async qjsonrpc interface in the middle.
 /// The client pings the server by first sending a 'ping' request to the rpc interface service,
@@ -34,29 +37,26 @@ use tempfile::tempdir;
 /// as if there was no networking involved
 #[tokio::main]
 async fn main() -> Result<()> {
-    // init shared resources
-    let listen = "https://localhost:33001";
-    let cert_base_dir = Arc::new(tempdir()?);
-    let (mut rpc_daemon, mut query_stream) = rpc_daemon();
+    let cert_base_dir = tempdir()?;
+    let (mut rpc_daemon, mut query_stream) = rpc_daemon(cert_base_dir.path(), Some(TIMEOUT_MS))?;
 
     // client task
-    let cert_base_dir1 = cert_base_dir.clone();
+    let client = ClientEndpoint::new(cert_base_dir.path(), Some(TIMEOUT_MS), false)?;
     let client_task = async move {
-        let client = ClientEndpoint::new(cert_base_dir1.path(), Some(10000u64), false)?;
         let mut out_conn = client.bind()?;
         println!("[client] bound");
 
         // try ping
-        let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
-        println!("[client] connected to {}", listen);
+        let mut out_jsonrpc_req = out_conn.connect(LISTEN, None).await?;
+        println!("[client] connected to {}", LISTEN);
         let ack = out_jsonrpc_req
             .send::<Response>(METHOD_PING, json!(null))
             .await?;
         println!("[client] ping sent and received response {:?}\n", ack);
 
-        // try ping with args
-        let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
-        println!("[client] connected to {}", listen);
+        // try echo
+        let mut out_jsonrpc_req = out_conn.connect(LISTEN, None).await?;
+        println!("[client] connected to {}", LISTEN);
         let ack = out_jsonrpc_req
             .send::<Response>(METHOD_ECHO, json!(42u32))
             .await?;
@@ -66,8 +66,8 @@ async fn main() -> Result<()> {
         );
 
         // try remote shutdown
-        let mut out_jsonrpc_req = out_conn.connect(listen, None).await?;
-        println!("[client] connected to {}", listen);
+        let mut out_jsonrpc_req = out_conn.connect(LISTEN, None).await?;
+        println!("[client] connected to {}", LISTEN);
         let ack = out_jsonrpc_req
             .send::<Response>(METHOD_SHUTDOWN, json!(null))
             .await?;
@@ -78,12 +78,7 @@ async fn main() -> Result<()> {
     };
 
     // the manager task (note this will run until query_stream is dropped)
-    let cert_base_dir2 = cert_base_dir.clone();
-    let rpc_daemon_task = async move {
-        rpc_daemon
-            .run(listen, Some(PathBuf::from(cert_base_dir2.path())), None)
-            .await
-    };
+    let rpc_daemon_task = async move { rpc_daemon.run(LISTEN).await };
 
     // dirt-simple server focuses only on servicing queries
     let fake_node_task = async move {
