@@ -14,6 +14,9 @@ path = "src/lib.rs"
 [[example]]
 name = "async_server"
 
+[[example]]
+name = "ping"
+
 [dependencies]
 dirs-next = "1.0.1"
 futures = "~0.3.5"
