@@ -121,12 +121,14 @@ impl Safe {
     ///
     /// ### Fetch FilesContainer relative path file
     /// ```rust
-    /// # use sn_api::{Safe, fetch::SafeData};
+    /// # use sn_api::{Safe, fetch::SafeData, new_safe_instance,retry_loop2};
     /// # use std::collections::BTreeMap;
-    /// # let mut safe = Safe::default();
-    /// # async_std::task::block_on(async {
-    /// #   safe.connect("", Some("fake-credentials")).await.unwrap();
+    /// #[tokio::main]
+    /// async fn main() {
+    /// #   let mut safe = new_safe_instance();
+    /// #   safe.connect(None, None, None).await.unwrap();
     ///     let (xorurl, _, _) = safe.files_container_create(Some("../testdata/"), None, true, false, false).await.unwrap();
+    /// #   let _ = retry_loop2!(safe.fetch(&xorurl, None));
     ///
     ///     let safe_data = safe.fetch( &format!( "{}/test.md", &xorurl.replace("?v=0", "") ), None ).await.unwrap();
     ///     let data_string = match safe_data {
@@ -143,7 +145,7 @@ impl Safe {
     ///     };
     ///
     ///     assert!(data_string.starts_with("hello tests!"));
-    /// # });
+    /// # }
     /// ```
     pub async fn fetch(&mut self, url: &str, range: Range) -> Result<SafeData> {
         let mut resolution_chain = self.retrieve_from_url(url, true, range, true).await?;

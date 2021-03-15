@@ -9,17 +9,23 @@
 
 #[cfg(feature = "app")]
 use crate::{api::common::parse_hex, Error, Result};
-use chrono::{DateTime, SecondsFormat, Utc};
 
+use chrono::{DateTime, SecondsFormat, Utc};
+use futures::Future;
 use sn_data_types::{Error as SafeNdError, PublicKey, Token};
-use std::str::{self, FromStr};
-use std::time;
+use std::{
+    str::{self, FromStr},
+    time,
+};
+use tokio::time::sleep;
 use xor_name::XorName;
 
 /// The conversion from coin to raw value
 const COIN_TO_RAW_CONVERSION: u64 = 1_000_000_000;
 // The maximum amount of safecoin that can be represented by a single `Token`
 const MAX_COINS_VALUE: u64 = (u32::max_value() as u64 + 1) * COIN_TO_RAW_CONVERSION - 1;
+
+const MAX_RETRIES: u8 = 3;
 
 #[allow(dead_code)]
 pub fn vec_to_hex(hash: Vec<u8>) -> String {
@@ -68,4 +74,31 @@ pub fn systemtime_to_rfc3339(t: &time::SystemTime) -> String {
 
 pub fn gen_timestamp_secs() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+/*
+pub async fn retry_loop2<F, Fut, T>(mut f: F) -> T
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T>>,
+{
+    for _ in 0..MAX_RETRIES {
+        match f().await {
+            Ok(value) => return value,
+            Err(_) => sleep(std::time::Duration::from_millis(200)).await,
+        }
+    }
+
+    panic!("Failed all {} attempts", MAX_RETRIES)
+}
+*/
+#[macro_export]
+macro_rules! retry_loop2 {
+    ($async_func:expr) => {
+        loop {
+            match $async_func.await {
+                Ok(val) => break val,
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(200)).await,
+            }
+        }
+    };
 }
