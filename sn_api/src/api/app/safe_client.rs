@@ -404,9 +404,9 @@ impl SafeAppClient {
     }
 
     // === Sequence data operations ===
-    pub async fn store_sequence(
+    pub async fn store_sequence<R: std::io::Read>(
         &self,
-        data: &[u8],
+        mut data: R,
         name: Option<XorName>,
         tag: u64,
         _permissions: Option<String>,
@@ -426,6 +426,11 @@ impl SafeAppClient {
         // The Sequence's owner will be the client's public key
         let owner = client.public_key().await;
 
+        let mut buf = vec![];
+        data.read_to_end(&mut buf).map_err(|e| {
+            Error::FileSystemError(format!("Failed to store Private Sequence data: {:?}", e))
+        })?;
+
         // Store the Sequence on the network
         let _address = if private {
             // Set permissions for append, delete, and manage perms to this application
@@ -433,7 +438,7 @@ impl SafeAppClient {
             let _ = perms.insert(owner, SequencePrivatePermissions::new(true, true));
 
             client
-                .store_private_sequence(Some(vec![data.to_vec()]), xorname, tag, owner, perms)
+                .store_private_sequence(Some(vec![buf]), xorname, tag, owner, perms)
                 .await
                 .map_err(|e| {
                     Error::NetDataError(format!("Failed to store Private Sequence data: {:?}", e))
@@ -445,7 +450,7 @@ impl SafeAppClient {
             let _ = perms.insert(user_app, SequencePublicPermissions::new(true));
 
             client
-                .store_public_sequence(Some(vec![data.to_vec()]), xorname, tag, owner, perms)
+                .store_public_sequence(Some(vec![buf]), xorname, tag, owner, perms)
                 .await
                 .map_err(|e| {
                     Error::NetDataError(format!("Failed to store Public Sequence data: {:?}", e))

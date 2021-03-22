@@ -894,7 +894,9 @@ mod tests {
     async fn test_fetch_public_sequence() -> Result<()> {
         let mut safe = new_safe_instance().await?;
         let data = b"Something super immutable";
-        let xorurl = safe.sequence_create(data, None, 25_000, false).await?;
+        let xorurl = safe
+            .sequence_create(data as &[u8], None, 25_000, false)
+            .await?;
 
         let safe_url = SafeUrl::from_url(&xorurl)?;
         let content = retry_loop!(safe.fetch(&xorurl, None));

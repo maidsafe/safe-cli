@@ -69,7 +69,8 @@ pub async fn seq_commander(
             // If data is '-' then we read arg from STDIN
             let xorurl = if data == "-" {
                 safe.sequence_create(
-                    &get_from_stdin(Some("...awaiting data that will be stored from STDIN"))?,
+                    get_from_stdin(Some("...awaiting data that will be stored from STDIN"))?
+                        .as_slice(),
                     xorname,
                     tag,
                     private,

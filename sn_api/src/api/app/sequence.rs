@@ -30,9 +30,9 @@ impl Safe {
     ///     assert_eq!(received_data, (0, data.to_vec()));
     /// # });
     /// ```
-    pub async fn sequence_create(
+    pub async fn sequence_create<R: std::io::Read>(
         &mut self,
-        data: &[u8],
+        data: R,
         name: Option<XorName>,
         type_tag: u64,
         private: bool,
@@ -163,10 +163,10 @@ mod tests {
         let initial_data = b"initial data";
 
         let xorurl = safe
-            .sequence_create(initial_data, None, 25_000, false)
+            .sequence_create(initial_data as &[u8], None, 25_000, false)
             .await?;
         let xorurl_priv = safe
-            .sequence_create(initial_data, None, 25_000, true)
+            .sequence_create(initial_data as &[u8], None, 25_000, true)
             .await?;
 
         let received_data = retry_loop!(safe.sequence_get(&xorurl));
@@ -182,8 +182,12 @@ mod tests {
         let data_v0 = b"First in the sequence";
         let data_v1 = b"Second in the sequence";
 
-        let xorurl = safe.sequence_create(data_v0, None, 25_000, false).await?;
-        let xorurl_priv = safe.sequence_create(data_v0, None, 25_000, true).await?;
+        let xorurl = safe
+            .sequence_create(data_v0 as &[u8], None, 25_000, false)
+            .await?;
+        let xorurl_priv = safe
+            .sequence_create(data_v0 as &[u8], None, 25_000, true)
+            .await?;
 
         let _ = retry_loop!(safe.sequence_get(&xorurl));
         safe.append_to_sequence(&xorurl, data_v1).await?;
@@ -210,7 +214,7 @@ mod tests {
         let data_v1 = b"Second in the sequence";
 
         let xorurl = client1
-            .sequence_create(data_v0, None, 25_000, false)
+            .sequence_create(data_v0 as &[u8], None, 25_000, false)
             .await?;
         let _ = retry_loop!(client1.sequence_get(&xorurl));
         client1.append_to_sequence(&xorurl, data_v1).await?;
@@ -238,7 +242,7 @@ mod tests {
         let data_v1 = b"First from client2";
 
         let xorurl = client1
-            .sequence_create(data_v0, None, 25_000, false)
+            .sequence_create(data_v0 as &[u8], None, 25_000, false)
             .await?;
 
         let received_client1 = retry_loop!(client1.sequence_get(&xorurl));
