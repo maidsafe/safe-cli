@@ -31,10 +31,14 @@ pub mod files;
 pub mod nrs_map;
 pub mod wallet;
 pub mod xorurl;
+#[cfg(test)]
+pub use crate::retry_loop2;
 pub use consts::DEFAULT_XORURL_BASE;
 pub use helpers::parse_coins_amount;
 pub use nrs::ProcessedEntries;
 use sn_data_types::Keypair;
+#[cfg(testing)]
+pub use test_helpers::new_safe_instance;
 pub use xor_name::{XorName, XOR_NAME_LEN};
 
 // TODO: should we be cloning this?
