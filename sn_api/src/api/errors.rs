@@ -57,9 +57,9 @@ pub enum Error {
     /// AccessDenied
     #[error("AccessDenied: {0}")]
     AccessDenied(String),
-    /// VersionNotFound
-    #[error("VersionNotFound: {0}")]
-    VersionNotFound(String),
+    /// HashNotFound
+    #[error("HashNotFound: {0}")]
+    HashNotFound(String),
     /// EntryNotFound
     #[error("EntryNotFound: {0}")]
     EntryNotFound(String),

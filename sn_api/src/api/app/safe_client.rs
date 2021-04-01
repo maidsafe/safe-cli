@@ -9,15 +9,16 @@
 
 use super::{fetch::Range, helpers::xorname_to_hex};
 use crate::{api::ipc::BootstrapConfig, Error, Result};
+use hex::encode;
 use log::{debug, info};
 use sn_client::{Client, Error as ClientError, ErrorMessage, TransfersError};
 use sn_data_types::{
+    register::{Address, Entry, EntryHash, PrivatePermissions, PublicPermissions, User},
     BlobAddress, Error as SafeNdError, Keypair, Map, MapAction, MapAddress, MapEntryActions,
-    MapPermissionSet, MapSeqEntryActions, MapSeqValue, MapValue, PublicKey, SequenceAddress,
-    SequencePrivatePermissions, SequencePublicPermissions, SequenceUser, Token,
+    MapPermissionSet, MapSeqEntryActions, MapSeqValue, MapValue, PublicKey, Token,
 };
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     net::SocketAddr,
     path::{Path, PathBuf},
 };
@@ -198,15 +199,21 @@ impl SafeAppClient {
         Ok(dot_counter)
     }
 
-    // // === Blob operations ===
-    pub async fn store_public_blob(&self, data: &[u8], _dry_run: bool) -> Result<XorName> {
-        // TODO: allow this operation to work without a connection when it's a dry run
+    // === Blob operations ===
+    pub async fn store_public_blob(&self, data: &[u8], dry_run: bool) -> Result<XorName> {
         let client = self.get_safe_client()?;
 
-        let address = client
-            .store_public_blob(data)
-            .await
-            .map_err(|e| Error::NetDataError(format!("Failed to PUT Public Blob: {:?}", e)))?;
+        let address = if dry_run {
+            // we only generate the address it would be
+            // stored at, but it's not stored on the network
+            let (_, address) = client.generate_data_map(data, true).await?;
+            address
+        } else {
+            client
+                .store_public_blob(data)
+                .await
+                .map_err(|e| Error::NetDataError(format!("Failed to PUT Public Blob: {:?}", e)))?
+        };
 
         let xorname = *address.name();
         Ok(xorname)
@@ -403,17 +410,17 @@ impl SafeAppClient {
             .await
     }
 
-    // === Sequence data operations ===
-    pub async fn store_sequence(
+    // === Register data operations ===
+    pub async fn store_register(
         &self,
         data: &[u8],
         name: Option<XorName>,
         tag: u64,
         _permissions: Option<String>,
         private: bool,
-    ) -> Result<XorName> {
+    ) -> Result<(XorName, EntryHash)> {
         debug!(
-            "Storing {} Sequence data with tag type: {:?}, xorname: {:?}",
+            "Storing {} Register data with tag type: {}, xorname: {:?}",
             if private { "Private" } else { "Public" },
             tag,
             name
@@ -421,48 +428,52 @@ impl SafeAppClient {
 
         let client = self.get_safe_client()?;
         let xorname = name.unwrap_or_else(rand::random);
-        info!("Xorname for storage: {:?}", &xorname);
+        info!("Xorname for new Register storage: {:?}", &xorname);
 
-        // The Sequence's owner will be the client's public key
-        let owner = client.public_key().await;
+        // The Register's owner will be the client's public key
+        let my_pk = client.public_key().await;
 
-        // Store the Sequence on the network
-        let _address = if private {
-            // Set permissions for append, delete, and manage perms to this application
+        // Store the Register on the network
+        let (_, hash) = if private {
+            // Set read and write  permissions to this application
             let mut perms = BTreeMap::default();
-            let _ = perms.insert(owner, SequencePrivatePermissions::new(true, true));
+            let _ = perms.insert(my_pk, PrivatePermissions::new(true, true));
 
             client
-                .store_private_sequence(Some(vec![data.to_vec()]), xorname, tag, owner, perms)
+                .store_private_register(Some(data.to_vec()), xorname, tag, my_pk, perms)
                 .await
                 .map_err(|e| {
-                    Error::NetDataError(format!("Failed to store Private Sequence data: {:?}", e))
+                    Error::NetDataError(format!("Failed to store Private Register data: {:?}", e))
                 })?
         } else {
-            // Set permissions for append and manage perms to this application
-            let user_app = SequenceUser::Key(owner);
+            // Set write permissions to this application
+            let user_app = User::Key(my_pk);
             let mut perms = BTreeMap::default();
-            let _ = perms.insert(user_app, SequencePublicPermissions::new(true));
+            let _ = perms.insert(user_app, PublicPermissions::new(true));
 
             client
-                .store_public_sequence(Some(vec![data.to_vec()]), xorname, tag, owner, perms)
+                .store_public_register(Some(data.to_vec()), xorname, tag, my_pk, perms)
                 .await
                 .map_err(|e| {
-                    Error::NetDataError(format!("Failed to store Public Sequence data: {:?}", e))
+                    Error::NetDataError(format!("Failed to store Public Register data: {:?}", e))
                 })?
         };
 
-        Ok(xorname)
+        let hash = hash.ok_or_else(|| {
+            Error::NetDataError(format!("Failed to obtain Register's new value hash"))
+        })?;
+
+        Ok((xorname, hash))
     }
 
-    pub async fn sequence_get_last_entry(
+    pub async fn read_register(
         &self,
         name: XorName,
         tag: u64,
         private: bool,
-    ) -> Result<(u64, Vec<u8>)> {
+    ) -> Result<BTreeSet<(EntryHash, Entry)>> {
         debug!(
-            "Fetching {} Sequence data w/ type: {:?}, xorname: {:?}",
+            "Fetching {} Register data w/ type: {}, xorname: {}",
             if private { "Private" } else { "Public" },
             tag,
             name
@@ -470,36 +481,33 @@ impl SafeAppClient {
 
         let client = self.get_safe_client()?;
 
-        let sequence_address = if private {
-            SequenceAddress::Private { name, tag }
+        let register_address = if private {
+            Address::Private { name, tag }
         } else {
-            SequenceAddress::Public { name, tag }
+            Address::Public { name, tag }
         };
 
-        client
-            .get_sequence_last_entry(sequence_address)
-            .await
-            .map_err(|err| {
-                if let ClientError::NetworkDataError(SafeNdError::NoSuchEntry) = err {
-                    Error::EmptyContent(format!("Empty Sequence found at XoR name {}", name))
-                } else {
-                    Error::NetDataError(format!(
-                        "Failed to retrieve last entry from Sequence data: {:?}",
-                        err
-                    ))
-                }
-            })
+        client.read_register(register_address).await.map_err(|err| {
+            if let ClientError::NetworkDataError(SafeNdError::NoSuchEntry) = err {
+                Error::EmptyContent(format!("Empty Register found at XoR name {}", name))
+            } else {
+                Error::NetDataError(format!(
+                    "Failed to read current value from Register data: {:?}",
+                    err
+                ))
+            }
+        })
     }
 
-    pub async fn sequence_get_entry(
+    pub async fn get_register_entry(
         &self,
         name: XorName,
         tag: u64,
-        index: u64,
+        hash: EntryHash,
         private: bool,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Entry> {
         debug!(
-            "Fetching {} Sequence data w/ type: {:?}, xorname: {:?}",
+            "Fetching {} Register data w/ type: {}, xorname: {}",
             if private { "Private" } else { "Public" },
             tag,
             name
@@ -507,25 +515,27 @@ impl SafeAppClient {
 
         let client = self.get_safe_client()?;
 
-        let sequence_address = if private {
-            SequenceAddress::Private { name, tag }
+        let register_address = if private {
+            Address::Private { name, tag }
         } else {
-            SequenceAddress::Public { name, tag }
+            Address::Public { name, tag }
         };
 
         let entry = client
-            .get_sequence_entry(sequence_address, index)
+            .get_register_entry(register_address, hash)
             .await
             .map_err(|err| {
                 if let ClientError::NetworkDataError(SafeNdError::NoSuchEntry) = err {
-                    Error::VersionNotFound(format!(
-                        "Invalid version ({}) for Sequence found at XoR name {}",
-                        index, name
+                    Error::HashNotFound(format!(
+                        "No entry with hash '{}' for Register found at XoR name {}",
+                        encode(hash),
+                        name
                     ))
                 } else {
                     Error::NetDataError(format!(
-                        "Failed to retrieve entry at index {} from Sequence data: {:?}",
-                        index, err
+                        "Failed to retrieve entry with hash '{}' from Register data: {:?}",
+                        encode(hash),
+                        err
                     ))
                 }
             })?;
@@ -533,15 +543,16 @@ impl SafeAppClient {
         Ok(entry.to_vec())
     }
 
-    pub async fn append_to_sequence(
+    pub async fn write_to_register(
         &self,
         data: &[u8],
         name: XorName,
         tag: u64,
         private: bool,
-    ) -> Result<()> {
+        parents: BTreeSet<EntryHash>,
+    ) -> Result<EntryHash> {
         debug!(
-            "Appending to {} Sequence data w/ type: {:?}, xorname: {:?}",
+            "Writting to {} Register data w/ type: {}, xorname: {}",
             if private { "Private" } else { "Public" },
             tag,
             name
@@ -549,15 +560,15 @@ impl SafeAppClient {
 
         let client = self.get_safe_client()?;
 
-        let sequence_address = if private {
-            SequenceAddress::Private { name, tag }
+        let register_address = if private {
+            Address::Private { name, tag }
         } else {
-            SequenceAddress::Public { name, tag }
+            Address::Public { name, tag }
         };
 
         client
-            .append_to_sequence(sequence_address, data.to_vec())
+            .write_to_register(register_address, data.to_vec(), parents)
             .await
-            .map_err(|e| Error::NetDataError(format!("Failed to append to Sequence: {:?}", e)))
+            .map_err(|e| Error::NetDataError(format!("Failed to write to Register: {:?}", e)))
     }
 }

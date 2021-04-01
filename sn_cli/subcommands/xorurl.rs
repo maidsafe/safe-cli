@@ -13,7 +13,8 @@ use super::{
 };
 use crate::operations::safe_net::connect;
 use anyhow::Result;
-use sn_api::{xorurl::SafeUrl, Safe};
+use hex::encode;
+use sn_api::{safeurl::SafeUrl, Safe};
 use structopt::StructOpt;
 
 // Defines subcommands of 'xorurl'
@@ -58,13 +59,12 @@ pub async fn xorurl_commander(
                 println!("Path: {}", safeurl.path_decoded()?);
                 println!("QueryString: {}", safeurl.query_string());
                 println!("QueryPairs: {:?}", safeurl.query_pairs());
-                println!("Fragment: {}", safeurl.fragment());
                 println!(
-                    "Content version: {}",
+                    "Hash: {}",
                     safeurl
-                        .content_version()
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "latest".to_string())
+                        .content_hash()
+                        .map(|hash| encode(hash))
+                        .unwrap_or_else(|| "".to_string())
                 );
             } else {
                 println!("{}", serialise_output(&safeurl, output_fmt));
@@ -76,7 +76,7 @@ pub async fn xorurl_commander(
                 get_from_arg_or_stdin(location, Some("...awaiting location path from stdin"))?;
 
             // Do a dry-run on the location
-            let (_version, processed_files, _files_map) = safe
+            let (_version, processed_files, _files_map, _hash) = safe
                 .files_container_create(Some(&location), None, recursive, follow_symlinks, true)
                 .await?;
 

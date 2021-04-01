@@ -77,7 +77,7 @@ pub enum SubCommands {
         cmd: Option<networks::NetworksSubCommands>,
     },
     #[structopt(
-        name = "auth", 
+        name = "auth",
         no_version,
         global_settings(&[AppSettings::DisableVersion]),
     )]
@@ -109,7 +109,7 @@ pub enum SubCommands {
     /// Manage files on the SAFE Network
     Files(files::FilesSubCommands),
     #[structopt(
-        name = "setup", 
+        name = "setup",
         no_version,
         global_settings(&[AppSettings::DisableVersion]),
     )]

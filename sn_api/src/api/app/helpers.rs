@@ -11,9 +11,12 @@
 use crate::{api::common::parse_hex, Error, Result};
 use chrono::{DateTime, SecondsFormat, Utc};
 
+use hex::encode;
 use sn_data_types::{Error as SafeNdError, PublicKey, Token};
-use std::str::{self, FromStr};
-use std::time;
+use std::{
+    str::{self, FromStr},
+    time,
+};
 use xor_name::XorName;
 
 /// The conversion from coin to raw value
@@ -21,13 +24,8 @@ const COIN_TO_RAW_CONVERSION: u64 = 1_000_000_000;
 // The maximum amount of safecoin that can be represented by a single `Token`
 const MAX_COINS_VALUE: u64 = (u32::max_value() as u64 + 1) * COIN_TO_RAW_CONVERSION - 1;
 
-#[allow(dead_code)]
-pub fn vec_to_hex(hash: Vec<u8>) -> String {
-    hash.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
 pub fn xorname_to_hex(xorname: &XorName) -> String {
-    xorname.0.iter().map(|b| format!("{:02x}", b)).collect()
+    encode(xorname.0)
 }
 
 pub fn pk_to_hex(pk: &PublicKey) -> String {
@@ -68,4 +66,14 @@ pub fn systemtime_to_rfc3339(t: &time::SystemTime) -> String {
 
 pub fn gen_timestamp_secs() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+// TEMP
+pub fn temp_pick_first_leaf<T>(
+    leaves: std::collections::BTreeSet<(crate::register::EntryHash, T)>,
+) -> Result<(crate::register::EntryHash, T)> {
+    leaves
+        .into_iter()
+        .next()
+        .ok_or(Error::ContentNotFound("No leaf in Register".to_string()))
 }

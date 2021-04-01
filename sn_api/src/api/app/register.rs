@@ -7,16 +7,16 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use super::{xorurl::SafeContentType, Safe};
-use crate::{
-    xorurl::{SafeDataType, XorUrl, XorUrlEncoder},
-    Error, Result,
-};
+pub use sn_data_types::register::{Entry, EntryHash};
+
+use super::safeurl::{SafeContentType, SafeDataType, SafeUrl, XorUrl};
+use crate::{Error, Result, Safe};
 use log::debug;
+use std::collections::BTreeSet;
 use xor_name::XorName;
 
 impl Safe {
-    /// Create a Public Sequence on the network
+    /// Create a Public Register on the network
     ///
     /// ## Example
     /// ```
@@ -25,33 +25,35 @@ impl Safe {
     /// # async_std::task::block_on(async {
     /// #   safe.connect("", Some("fake-credentials")).await.unwrap();
     ///     let data = b"First in the sequence";
-    ///     let xorurl = safe.sequence_create(data, None, 20_000, false).await.unwrap();
-    ///     let received_data = safe.sequence_get(&xorurl).await.unwrap();
+    ///     let xorurl = safe.register_create(data, None, 20_000, false).await.unwrap();
+    ///     let received_data = safe.register_read(&xorurl).await.unwrap();
     ///     assert_eq!(received_data, (0, data.to_vec()));
     /// # });
     /// ```
-    pub async fn sequence_create(
+    pub async fn register_create(
         &mut self,
         data: &[u8],
         name: Option<XorName>,
         type_tag: u64,
         private: bool,
-    ) -> Result<XorUrl> {
-        let xorname = self
+    ) -> Result<(XorUrl, EntryHash)> {
+        let (xorname, hash) = self
             .safe_client
-            .store_sequence(data, name, type_tag, None, private)
+            .store_register(data, name, type_tag, None, private)
             .await?;
 
-        XorUrlEncoder::encode_sequence_data(
+        let xorurl = SafeUrl::encode_register_url(
             xorname,
             type_tag,
             SafeContentType::Raw,
             self.xorurl_base,
             private,
-        )
+        )?;
+
+        Ok((xorurl, hash))
     }
 
-    /// Get data from a Public Sequence on the network
+    /// Get data from a Public Register on the network
     ///
     /// ## Example
     /// ```
@@ -60,68 +62,59 @@ impl Safe {
     /// # async_std::task::block_on(async {
     /// #   safe.connect("", Some("fake-credentials")).await.unwrap();
     ///     let data = b"First in the sequence";
-    ///     let xorurl = safe.sequence_create(data, None, 20_000, false).await.unwrap();
-    ///     let received_data = safe.sequence_get(&xorurl).await.unwrap();
+    ///     let xorurl = safe.register_create(data, None, 20_000, false).await.unwrap();
+    ///     let received_data = safe.register_read(&xorurl).await.unwrap();
     ///     assert_eq!(received_data, (0, data.to_vec()));
     /// # });
     /// ```
-    pub async fn sequence_get(&mut self, url: &str) -> Result<(u64, Vec<u8>)> {
-        debug!("Getting Public Sequence data from: {:?}", url);
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+    pub async fn register_read(&mut self, url: &str) -> Result<BTreeSet<(EntryHash, Entry)>> {
+        debug!("Getting Public Register data from: {:?}", url);
+        let (safeurl, _) = self.parse_and_resolve_url(url).await?;
 
-        self.fetch_sequence(&xorurl_encoder).await
+        self.fetch_register_value(&safeurl).await
     }
 
-    /// Fetch a Sequence from a XorUrlEncoder without performing any type of URL resolution
-    pub(crate) async fn fetch_sequence(
+    /// Fetch a Register from a SafeUrl without performing any type of URL resolution
+    pub(crate) async fn fetch_register_value(
         &mut self,
-        xorurl_encoder: &XorUrlEncoder,
-    ) -> Result<(u64, Vec<u8>)> {
-        let is_private = xorurl_encoder.data_type() == SafeDataType::PrivateSequence;
-        let data = match xorurl_encoder.content_version() {
-            Some(version) => {
-                // We fetch a specific entry since the URL specifies a specific version
+        safeurl: &SafeUrl,
+    ) -> Result<BTreeSet<(EntryHash, Entry)>> {
+        let is_private = safeurl.data_type() == SafeDataType::PrivateRegister;
+        let data = match safeurl.content_hash() {
+            Some(hash) => {
+                // We fetch a specific entry since the URL specifies a specific hash
                 let data = self
                     .safe_client
-                    .sequence_get_entry(
-                        xorurl_encoder.xorname(),
-                        xorurl_encoder.type_tag(),
-                        version,
-                        is_private,
-                    )
+                    .get_register_entry(safeurl.xorname(), safeurl.type_tag(), hash, is_private)
                     .await?;
 
-                Ok((version, data))
+                Ok(vec![(hash, data)].into_iter().collect())
             }
             None => {
-                // ...then get last entry in the Sequence
+                // ...then get last entry from the Register
                 self.safe_client
-                    .sequence_get_last_entry(
-                        xorurl_encoder.xorname(),
-                        xorurl_encoder.type_tag(),
-                        is_private,
-                    )
+                    .read_register(safeurl.xorname(), safeurl.type_tag(), is_private)
                     .await
             }
         };
 
         match data {
-            Ok((version, value)) => {
-                debug!("Sequence retrieved... v{}", &version);
-                Ok((version, value))
+            Ok(data) => {
+                debug!("Register retrieved...");
+                Ok(data)
             }
             Err(Error::EmptyContent(_)) => Err(Error::EmptyContent(format!(
-                "Sequence found at \"{}\" was empty",
-                xorurl_encoder
+                "Register found at \"{}\" was empty",
+                safeurl
             ))),
             Err(Error::ContentNotFound(_)) => Err(Error::ContentNotFound(
-                "No Sequence found at this address".to_string(),
+                "No Register found at this address".to_string(),
             )),
             other => other,
         }
     }
 
-    /// Append data to a Public Sequence on the network
+    /// Write data to a Public Register on the network
     ///
     /// ## Example
     /// ```
@@ -130,31 +123,33 @@ impl Safe {
     /// # async_std::task::block_on(async {
     /// #   safe.connect("", Some("fake-credentials")).await.unwrap();
     ///     let data1 = b"First in the sequence";
-    ///     let xorurl = safe.sequence_create(data1, None, 20_000, false).await.unwrap();
+    ///     let xorurl = safe.register_create(data1, None, 20_000, false).await.unwrap();
     ///     let data2 = b"Second in the sequence";
     ///     safe.append_to_sequence(&xorurl, data2).await.unwrap();
-    ///     let received_data = safe.sequence_get(&xorurl).await.unwrap();
+    ///     let received_data = safe.register_read(&xorurl).await.unwrap();
     ///     assert_eq!(received_data, (1, data2.to_vec()));
     /// # });
     /// ```
-    pub async fn append_to_sequence(&mut self, url: &str, data: &[u8]) -> Result<()> {
-        let xorurl_encoder = Safe::parse_url(url)?;
-        if xorurl_encoder.content_version().is_some() {
+    pub async fn write_to_register(&mut self, url: &str, data: &[u8]) -> Result<EntryHash> {
+        let safeurl = Safe::parse_url(url)?;
+        if safeurl.content_hash().is_some() {
+            // TODO: perhaps we can allow this instad, and that's how an
+            // application can specify the parent entry in the Register.
             return Err(Error::InvalidInput(format!(
-                "The target URL cannot contain a version: {}",
+                "The target URL cannot contain a content hash: {}",
                 url
             )));
         };
 
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let (safeurl, _) = self.parse_and_resolve_url(url).await?;
 
-        let xorname = xorurl_encoder.xorname();
-        let type_tag = xorurl_encoder.type_tag();
-        let is_private = xorurl_encoder.data_type() == SafeDataType::PrivateSequence;
+        let xorname = safeurl.xorname();
+        let type_tag = safeurl.type_tag();
+        let is_private = safeurl.data_type() == SafeDataType::PrivateRegister;
 
-        // append to the data the data
+        // write the data to the Register
         self.safe_client
-            .append_to_sequence(data, xorname, type_tag, is_private)
+            .write_to_register(data, xorname, type_tag, is_private, BTreeSet::new())
             .await
     }
 }
@@ -163,21 +158,21 @@ impl Safe {
 mod tests {
     use crate::{api::app::test_helpers::new_safe_instance, retry_loop};
     use anyhow::Result;
-
+    /*
     #[tokio::test]
-    async fn test_sequence_create() -> Result<()> {
+    async fn test_register_create() -> Result<()> {
         let mut safe = new_safe_instance().await?;
         let initial_data = b"initial data";
 
         let xorurl = safe
-            .sequence_create(initial_data, None, 25_000, false)
+            .register_create(initial_data, None, 25_000, false)
             .await?;
         let xorurl_priv = safe
-            .sequence_create(initial_data, None, 25_000, true)
+            .register_create(initial_data, None, 25_000, true)
             .await?;
 
-        let received_data = retry_loop!(safe.sequence_get(&xorurl));
-        let received_data_priv = retry_loop!(safe.sequence_get(&xorurl_priv));
+        let received_data = retry_loop!(safe.register_read(&xorurl));
+        let received_data_priv = retry_loop!(safe.register_read(&xorurl_priv));
         assert_eq!(received_data, (0, initial_data.to_vec()));
         assert_eq!(received_data_priv, (0, initial_data.to_vec()));
         Ok(())
@@ -189,22 +184,22 @@ mod tests {
         let data_v0 = b"First in the sequence";
         let data_v1 = b"Second in the sequence";
 
-        let xorurl = safe.sequence_create(data_v0, None, 25_000, false).await?;
-        let xorurl_priv = safe.sequence_create(data_v0, None, 25_000, true).await?;
+        let xorurl = safe.register_create(data_v0, None, 25_000, false).await?;
+        let xorurl_priv = safe.register_create(data_v0, None, 25_000, true).await?;
 
-        let _ = retry_loop!(safe.sequence_get(&xorurl));
+        let _ = retry_loop!(safe.register_read(&xorurl));
         safe.append_to_sequence(&xorurl, data_v1).await?;
 
-        let _ = retry_loop!(safe.sequence_get(&xorurl_priv));
+        let _ = retry_loop!(safe.register_read(&xorurl_priv));
         safe.append_to_sequence(&xorurl_priv, data_v1).await?;
 
-        let received_data_v0 = safe.sequence_get(&format!("{}?v=0", xorurl)).await?;
-        let received_data_v1 = safe.sequence_get(&xorurl).await?;
+        let received_data_v0 = safe.register_read(&format!("{}?v=0", xorurl)).await?;
+        let received_data_v1 = safe.register_read(&xorurl).await?;
         assert_eq!(received_data_v0, (0, data_v0.to_vec()));
         assert_eq!(received_data_v1, (1, data_v1.to_vec()));
 
-        let received_data_v0_priv = safe.sequence_get(&format!("{}?v=0", xorurl)).await?;
-        let received_data_v1_priv = safe.sequence_get(&xorurl).await?;
+        let received_data_v0_priv = safe.register_read(&format!("{}?v=0", xorurl)).await?;
+        let received_data_v1_priv = safe.register_read(&xorurl).await?;
         assert_eq!(received_data_v0_priv, (0, data_v0.to_vec()));
         assert_eq!(received_data_v1_priv, (1, data_v1.to_vec()));
         Ok(())
@@ -217,14 +212,14 @@ mod tests {
         let data_v1 = b"Second in the sequence";
 
         let xorurl = client1
-            .sequence_create(data_v0, None, 25_000, false)
+            .register_create(data_v0, None, 25_000, false)
             .await?;
-        let _ = retry_loop!(client1.sequence_get(&xorurl));
+        let _ = retry_loop!(client1.register_read(&xorurl));
         client1.append_to_sequence(&xorurl, data_v1).await?;
 
         let mut client2 = new_safe_instance().await?;
-        let received_data_v0 = client2.sequence_get(&format!("{}?v=0", xorurl)).await?;
-        let received_data_v1 = client2.sequence_get(&xorurl).await?;
+        let received_data_v0 = client2.register_read(&format!("{}?v=0", xorurl)).await?;
+        let received_data_v1 = client2.register_read(&xorurl).await?;
         assert_eq!(received_data_v0, (0, data_v0.to_vec()));
         assert_eq!(received_data_v1, (1, data_v1.to_vec()));
         Ok(())
@@ -245,14 +240,14 @@ mod tests {
         let data_v1 = b"First from client2";
 
         let xorurl = client1
-            .sequence_create(data_v0, None, 25_000, false)
+            .register_create(data_v0, None, 25_000, false)
             .await?;
 
-        let received_client1 = retry_loop!(client1.sequence_get(&xorurl));
+        let received_client1 = retry_loop!(client1.register_read(&xorurl));
 
         client2.append_to_sequence(&xorurl, data_v1).await?;
 
-        let received_client2 = retry_loop!(client2.sequence_get(&xorurl));
+        let received_client2 = retry_loop!(client2.register_read(&xorurl));
 
         // client1 sees only data_v0 as version 0 since it's using its own replica
         // it didn't see the append from client2 even it was merged on the network
@@ -264,12 +259,13 @@ mod tests {
         // a third client should see all versions now since it'll fetch from the
         // replicas on the network which have merged all appends from client1 and client2,
         let mut client3 = new_safe_instance().await?;
-        let received_v0 = client3.sequence_get(&format!("{}?v=0", xorurl)).await?;
+        let received_v0 = client3.register_read(&format!("{}?v=0", xorurl)).await?;
         assert_eq!((0, data_v0.to_vec()), received_v0);
 
-        let received_v1 = client3.sequence_get(&xorurl).await?;
+        let received_v1 = client3.register_read(&xorurl).await?;
         assert_eq!((1, data_v1.to_vec()), received_v1);
 
         Ok(())
     }
+    */
 }

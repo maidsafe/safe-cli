@@ -8,7 +8,7 @@
 // Software.
 
 use anyhow::Result;
-use sn_api::{fetch::SafeData, xorurl::SafeUrl, BootstrapConfig, Safe};
+use sn_api::{fetch::SafeData, safeurl::SafeUrl, BootstrapConfig, Safe};
 use std::{env::temp_dir, fs::File, io::Write, path::PathBuf};
 
 const FILE_TO_UPLOAD: &str = "file_to_upload.rs";
@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let dry_run = false; // commit the operation on the network
 
     println!("Uploading '{}' to Safe ...", location);
-    let (xorurl, _, _) = safe
+    let (xorurl, _, _, _) = safe
         .files_container_create(Some(&location), dest, recursive, follow_links, dry_run)
         .await?;
     // The 'files_container_create' API returns (among other information) the
