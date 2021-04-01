@@ -30,7 +30,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use log::debug;
-use sn_api::{xorurl::XorUrlBase, Safe};
+use sn_api::{safeurl::XorUrlBase, Safe};
 use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
 
 #[derive(StructOpt, Debug)]

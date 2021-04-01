@@ -104,7 +104,7 @@ pub async fn cat_commander(cmd: CatCommands, output_fmt: OutputFmt, safe: &mut S
         SafeData::SafeKey { .. } => {
             println!("No content to show since the URL targets a SafeKey. Use the 'dog' command to obtain additional information about the targeted SafeKey.");
         }
-        SafeData::PublicSequence { data, version, .. } => {
+        SafeData::PublicRegister { data, version, .. } => {
             if OutputFmt::Pretty == output_fmt {
                 println!("Public Sequence (version {}) at \"{}\":", version, url);
                 if cmd.hexdump {
@@ -120,7 +120,7 @@ pub async fn cat_commander(cmd: CatCommands, output_fmt: OutputFmt, safe: &mut S
                 println!("{}", serialise_output(&(url, data), output_fmt));
             }
         }
-        SafeData::PrivateSequence { data, version, .. } => {
+        SafeData::PrivateRegister { data, version, .. } => {
             if OutputFmt::Pretty == output_fmt {
                 println!("Private Sequence (version {}) at \"{}\":", version, url);
                 if cmd.hexdump {
