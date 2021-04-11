@@ -71,6 +71,12 @@ pub fn sk_to_hex(sk: sn_data_types::SecretKey) -> String {
     }
 }
 
+/// Convert byte vector to hex
+#[allow(dead_code)]
+pub fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 // Send a request to authd using JSON-RPC over QUIC
 pub async fn send_authd_request<T>(
     dest_endpoint: &str,
@@ -93,52 +99,68 @@ where
             paths.push(".safe");
             paths.push("authd");
 
-            let cert_base_path = paths.display().to_string();
-
-            let qjsonrpc_client = ClientEndpoint::new(
-                &cert_base_path,
+            // disble lint to map string to the proper error variant
+            #[allow(clippy::redundant_closure)]
+            send_qjsonrpc_request(
+                &paths,
                 Some(SN_AUTHD_CONNECTION_IDLE_TIMEOUT),
-                false,
+                dest_endpoint,
+                method,
+                params,
             )
-            .map_err(|err| {
-                Error::AuthdClientError(format!("Failed to create client endpoint: {}", err))
-            })?;
-
-            // We try to obtain current runtime or create a new one if there is none
-            let runtime = match runtime::Handle::try_current() {
-                Ok(r) => r,
-                Err(_) => runtime::Runtime::new()
-                    .map_err(|err| {
-                        Error::AuthdClientError(format!("Failed to create runtime: {}", err))
-                    })?
-                    .handle()
-                    .clone(),
-            };
-
-            let mut outgoing_conn = {
-                let _ = runtime.enter();
-                qjsonrpc_client.bind().map_err(|err| {
-                    Error::AuthdClientError(format!("Failed to bind endpoint: {}", err))
-                })?
-            };
-
-            // Establish a new connection
-            outgoing_conn
-                .connect(dest_endpoint, None)
-                .await
-                .map_err(|err| {
-                    Error::AuthdClientError(format!(
-                        "Failed to establish connection with authd: {}",
-                        err
-                    ))
-                })?
-                // Send request and await for response
-                .send(method, params)
-                .await
-                .map_err(|err| match err {
-                    qjsonrpc::Error::RemoteEndpointError(msg) => Error::AuthdError(msg),
-                    other => Error::AuthdClientError(other.to_string()),
-                })
+            .await
+            .map_err(|msg| Error::AuthdClientError(msg))
         }
     }
+}
+
+// Send a request to authd using JSON-RPC over QUIC
+pub async fn send_qjsonrpc_request<T, P>(
+    cert_base_path: P,
+    idle_timeout: Option<u64>,
+    dest_endpoint: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> std::result::Result<T, String>
+where
+    T: DeserializeOwned,
+    P: AsRef<std::path::Path>,
+{
+    // build a client
+    let qjsonrpc_client = ClientEndpoint::new(
+        cert_base_path.as_ref().to_str().unwrap(),
+        idle_timeout,
+        false,
+    )
+    .map_err(|err| format!("Failed to create client endpoint: {}", err))?;
+
+    // We try to obtain current runtime or create a new one if there is none
+    let runtime = match runtime::Handle::try_current() {
+        Ok(r) => r,
+        Err(_) => runtime::Runtime::new()
+            .map_err(|err| format!("Failed to create runtime: {}", err))?
+            .handle()
+            .clone(),
+    };
+
+    // bind
+    let mut outgoing_conn = {
+        let _ = runtime.enter();
+        qjsonrpc_client
+            .bind()
+            .map_err(|err| format!("Failed to bind endpoint: {}", err))?
+    };
+
+    outgoing_conn
+        // connect
+        .connect(dest_endpoint, None)
+        .await
+        .map_err(|err| format!("Failed to establish connection with authd: {}", err))?
+        //send and wait for response
+        .send(method, params)
+        .await
+        .map_err(|err| match err {
+            qjsonrpc::Error::RemoteEndpointError(msg) => msg,
+            other => other.to_string(),
+        })
 }

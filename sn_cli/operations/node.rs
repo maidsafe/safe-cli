@@ -12,6 +12,7 @@ use super::helpers::download_from_s3_and_install_bin;
 use anyhow::{anyhow, bail, Context, Result};
 use log::debug;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use sn_api::NodeRpcClient;
 use sn_launch_tool::{join_with, run_with};
 use std::{
     collections::{HashMap, HashSet},
@@ -406,4 +407,105 @@ pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+}
+
+/// Helper to assign default value of ~/.safe/node/local-node/rpc
+/// to cert_base if cert_base is None
+fn get_node_cert_base(cert_base: Option<PathBuf>) -> Result<PathBuf> {
+    match cert_base {
+        Some(cert_base) => Ok(cert_base),
+        None => {
+            let mut path = get_node_bin_path(None)?;
+            path.push("local-node");
+            path.push("rpc");
+            Ok(path)
+        }
+    }
+}
+
+/// Issues an rpc to get info related to storage (see GetRewardsInfoResult)
+pub async fn node_get_rewards_info(rpc_port: u16, cert_base: Option<PathBuf>) -> Result<()> {
+    let cert_base = get_node_cert_base(cert_base)?;
+    let client = NodeRpcClient::new(rpc_port, &cert_base)?;
+    let info = client.get_rewards_info().await?;
+    println!("Reward Key: {}", &info.reward_key);
+    Ok(())
+}
+
+/// Issue an rpc to set the reward key from a hex string
+/// and then prints the rewards info (see node_get_rewards_info())
+pub async fn node_set_reward_key(
+    rpc_port: u16,
+    cert_base: Option<PathBuf>,
+    reward_key: String,
+) -> Result<()> {
+    let cert_base = get_node_cert_base(cert_base)?;
+    let client = NodeRpcClient::new(rpc_port, &cert_base)?;
+    let res = client.set_reward_key(reward_key.clone()).await?;
+    println!("Old Reward Key: {}", &res.old_reward_key);
+    println!("New Reward Key: {}", &reward_key);
+    Ok(())
+}
+
+/// Issues an rpc to get info related to storage (see GetStorageInfoResult)
+pub async fn node_get_storage_info(
+    rpc_port: u16,
+    cert_base: Option<PathBuf>,
+    detailed: bool,
+) -> Result<()> {
+    let cert_base = get_node_cert_base(cert_base)?;
+    let client = NodeRpcClient::new(rpc_port, &cert_base)?;
+    let info = client.get_storage_info().await?;
+    println!("Node Root: {:?}", &info.node_root);
+    println!("Used space: {}", &info.used);
+    println!("Total space: {}", &info.total);
+    if detailed {
+        println!("---------DETAILS---------");
+        for (local_store_path, local_value) in info.local_stores.iter() {
+            println!("'{:?}':{}", local_store_path, local_value);
+        }
+    }
+    Ok(())
+}
+
+/// Issues an rpc to get a specified range of log lines (see GetLogsResult and GetLogsParams)
+pub async fn node_get_logs(
+    rpc_port: u16,
+    cert_base: Option<PathBuf>,
+    log_id: u64,
+    start_idx: i64,
+    num_lines: u64,
+) -> Result<()> {
+    use std::convert::TryFrom;
+
+    // get lines
+    let cert_base = get_node_cert_base(cert_base)?;
+    let client = NodeRpcClient::new(rpc_port, &cert_base)?;
+    let logs = client.get_logs(log_id, start_idx, num_lines).await?;
+
+    // print result
+    let num_fetched = u64::try_from(logs.lines.len()).unwrap_or(u64::MAX);
+    if num_lines != num_fetched {
+        println!(
+            "[Info] Requested {} but received {} log lines",
+            num_lines, num_fetched
+        );
+    }
+    println!("---------LOGS {}---------", log_id);
+    for line in logs.lines.iter() {
+        println!("{}", line);
+    }
+    Ok(())
+}
+
+/// Issues several RPCs to get some general, bird's-eye information of the node
+pub async fn node_get_status(rpc_port: u16, cert_base: Option<PathBuf>) -> Result<()> {
+    let cert_base = get_node_cert_base(cert_base)?;
+    let client = NodeRpcClient::new(rpc_port, &cert_base)?;
+    let rewards_info = client.get_rewards_info().await?;
+    let storage_info = client.get_storage_info().await?;
+    println!("Reward Key: {}", &rewards_info.reward_key);
+    println!("Used space: {}", &storage_info.used);
+    println!("Total space: {}", &storage_info.total);
+    Ok(())
 }

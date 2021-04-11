@@ -38,6 +38,7 @@ xor_name = "1.1.10"
 pbkdf2 = { version = "~0.7.0", default-features = false }
 hmac = "~0.10.1"
 sha3 = "~0.9.1"
+sn_node_rpc_data_types = { git = "https://github.com/Scorch-Dev/sn_node_rpc_data_types", branch = "master" }
 
 [dependencies.tiny-keccak]
 version = "2.0.2"
@@ -47,8 +48,9 @@ features = [ "sha3" ]
 authenticator = []
 authd_client = []
 app = []
+node_rpc_client = []
 simulated-payouts = ["sn_client/simulated-payouts"]
-default = ["simulated-payouts", "authenticator", "authd_client", "app"]
+default = ["simulated-payouts", "authenticator", "authd_client", "app", "node_rpc_client"]
 
 [dev-dependencies]
 anyhow = "1.0.38"

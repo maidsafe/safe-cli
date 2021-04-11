@@ -87,4 +87,7 @@ pub enum Error {
     /// FileSystemError
     #[error("FileSystemError: {0}")]
     FileSystemError(String),
+    /// NodeRpcClientError
+    #[error("NodeRpcClientError: {0}")]
+    NodeRpcClientError(String),
 }

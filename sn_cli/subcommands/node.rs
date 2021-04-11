@@ -13,7 +13,9 @@ use crate::operations::{
 };
 use anyhow::{anyhow, Result};
 use log::debug;
-use std::{collections::HashSet, iter::FromIterator, net::SocketAddr, path::PathBuf};
+use std::{
+    collections::HashSet, convert::TryInto, iter::FromIterator, net::SocketAddr, path::PathBuf,
+};
 use structopt::StructOpt;
 
 const NODES_DATA_FOLDER: &str = "baby-fleming-nodes";
@@ -88,6 +90,62 @@ pub enum NodeSubCommands {
         #[structopt(long = "node-path", env = "SN_NODE_PATH")]
         node_path: Option<PathBuf>,
     },
+    /// handle info related to rewards (like reward key, etc.)
+    Rewards {
+        /// What port to issue node remote procedure calls on
+        #[structopt(long = "rpc-port", default_value = "34000")]
+        rpc_port: u16,
+        /// Root dir of node rpc certification (default is ~./safe/node/local-node/rpc).
+        #[structopt(long = "cert-base")]
+        cert_base: Option<PathBuf>,
+        /// If provided, sets a new reward key from a hex string before fetching rewards info
+        #[structopt(long = "set-key")]
+        set_key: Option<String>,
+    },
+    /// handle info related to storage (e.g. how much storage the node is offering vs using)
+    Storage {
+        /// What port to issue node remote procedure calls on
+        #[structopt(long = "rpc-port", default_value = "34000")]
+        rpc_port: u16,
+        /// Root dir of node rpc certification (default is ~./safe/node/local-node/rpc).
+        #[structopt(long = "cert-base")]
+        cert_base: Option<PathBuf>,
+        /// Set to true to also fetch a breakdown of storage usage across the various local stores
+        #[structopt(long = "detailed")]
+        detailed: bool,
+    },
+    /// handle info related to storage (e.g. how much storage the node is offering vs using)
+    Logs {
+        /// What port to issue node remote procedure calls on
+        #[structopt(long = "rpc-port", default_value = "34000")]
+        rpc_port: u16,
+        /// Root dir of node rpc certification (default is ~./safe/node/local-node/rpc).
+        #[structopt(long = "cert-base")]
+        cert_base: Option<PathBuf>,
+        /// Which log to fetch by id (options: 0 = plaintext logs)
+        #[structopt(long = "log-id", default_value = "0")]
+        log_id: u64,
+        /// Start line index of log fetch (see from-head)
+        #[structopt(long = "start-idx", default_value = "0")]
+        start_idx: i64,
+        /// How many log lines to fetch
+        #[structopt(long = "num-lines", default_value = "10")]
+        num_lines: u64,
+        /// True to indicate start idx is relative to log head
+        /// False to indicate start-idx is the total number of log lines - num_lines
+        #[structopt(long = "from-head")]
+        from_head: bool,
+    },
+    /// A convenience RPC that wraps other commands like "rewards" and "storage"
+    /// to Get some general, bird's-eye-view info of the node
+    Status {
+        /// What port to issue node remote procedure calls on
+        #[structopt(long = "rpc-port", default_value = "34000")]
+        rpc_port: u16,
+        /// Root dir of node rpc certification (default is ~./safe/node/local-node/rpc).
+        #[structopt(long = "cert-base")]
+        cert_base: Option<PathBuf>,
+    },
 }
 
 pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
@@ -146,6 +204,41 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
         ),
         Some(NodeSubCommands::Killall { node_path }) => node_shutdown(node_path),
         Some(NodeSubCommands::Update { node_path }) => node_update(node_path),
+        Some(NodeSubCommands::Rewards {
+            rpc_port,
+            cert_base,
+            set_key,
+        }) => {
+            if let Some(key_hex) = set_key {
+                node_set_reward_key(rpc_port, cert_base, key_hex).await
+            } else {
+                node_get_rewards_info(rpc_port, cert_base).await
+            }
+        }
+        Some(NodeSubCommands::Storage {
+            rpc_port,
+            cert_base,
+            detailed,
+        }) => node_get_storage_info(rpc_port, cert_base, detailed).await,
+        Some(NodeSubCommands::Logs {
+            rpc_port,
+            cert_base,
+            log_id,
+            start_idx,
+            num_lines,
+            from_head,
+        }) => {
+            let start_idx = if from_head {
+                start_idx
+            } else {
+                (-start_idx).saturating_sub(num_lines.try_into().unwrap_or(i64::MAX))
+            };
+            node_get_logs(rpc_port, cert_base, log_id, start_idx, num_lines).await
+        }
+        Some(NodeSubCommands::Status {
+            rpc_port,
+            cert_base,
+        }) => node_get_status(rpc_port, cert_base).await,
         None => Err(anyhow!("Missing node subcommand")),
     }
 }
