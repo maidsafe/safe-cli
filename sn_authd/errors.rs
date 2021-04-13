@@ -12,74 +12,123 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Error {
-    GeneralError(String),
-    AuthdAlreadyStarted(String),
-    Unexpected(String),
-    Unknown((String, i32)),
+pub enum ErrorKind {
+    GeneralError,
+    AuthdAlreadyStarted,
+    Unexpected,
+    Unknown,
 }
 
-impl From<Error> for String {
-    fn from(error: Error) -> String {
-        error.to_string()
+/// Error types used for sn_auth with support for suggestions. To create an error with suggestions
+/// use `Error::from_message_with_suggestions` method. `Error::from_message` can be used if suggestions
+/// don't need to be provided such as for internal errors.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Error {
+    kind: ErrorKind,
+    message: String,
+    suggestions: Option<Vec<String>>,
+}
+
+impl Error {
+    pub fn from_message(kind: ErrorKind, message: String) -> Error {
+        Error {
+            kind,
+            message,
+            suggestions: None,
+        }
+    }
+
+    pub fn from_message_with_suggestions(
+        kind: ErrorKind,
+        message: String,
+        suggestions: Vec<String>,
+    ) -> Error {
+        Error {
+            kind,
+            message,
+            suggestions: Some(suggestions),
+        }
+    }
+
+    pub fn from_code(error_code: i32, message: String) -> Self {
+        let kind = match error_code {
+            1 => ErrorKind::GeneralError,
+            10 => ErrorKind::AuthdAlreadyStarted,
+            20 => ErrorKind::Unexpected,
+            _ => ErrorKind::Unknown,
+        };
+
+        Error {
+            kind,
+            message,
+            suggestions: None,
+        }
+    }
+
+    pub fn from_code_with_suggestion(
+        error_code: i32,
+        message: String,
+        suggestions: Vec<String>,
+    ) -> Self {
+        let kind = match error_code {
+            1 => ErrorKind::GeneralError,
+            10 => ErrorKind::AuthdAlreadyStarted,
+            20 => ErrorKind::Unexpected,
+            _ => ErrorKind::Unknown,
+        };
+
+        Error {
+            kind,
+            message,
+            suggestions: Some(suggestions),
+        }
+    }
+
+    pub fn code(&self) -> i32 {
+        self.kind.error_code()
     }
 }
 
+impl std::error::Error for Error {}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description())
+        let mut message = format!("{} - {}", self.kind.description(), self.message);
+        if let Some(suggestions) = &self.suggestions {
+            let mut output = vec![message, "Suggestions --- ".to_owned()];
+            output.extend_from_slice(&suggestions);
+            message = output.join("\n");
+        }
+        write!(f, "{} - {}", self.kind.description(), message)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
-        Error::GeneralError(error.to_string())
+        Error::from_message(ErrorKind::GeneralError, error.to_string())
     }
 }
 
-impl Error {
+impl ErrorKind {
     pub fn error_code(&self) -> i32 {
-        use Error::*;
+        use ErrorKind::*;
         // Don't use any of the reserved exit codes:
         // http://tldp.org/LDP/abs/html/exitcodes.html#AEN23549
         match self {
-            GeneralError(_) => 1,
-            AuthdAlreadyStarted(_) => 10,
-            Unexpected(_) => 20,
-            Unknown(_) => 1,
+            GeneralError => 1,
+            AuthdAlreadyStarted => 10,
+            Unexpected => 20,
+            Unknown => 1,
         }
     }
 
-    pub fn description(&self) -> String {
-        use Error::*;
-        let (error_type, error_msg) = match self {
-            GeneralError(info) => ("GeneralError", info),
-            AuthdAlreadyStarted(info) => ("AuthdAlreadyStarted", info),
-            Unexpected(info) => ("Unexpected", info),
-            Unknown((info, _code)) => ("Unknown", info),
-        };
-
-        format!("[Error] {} - {}", error_type, error_msg)
-    }
-
-    pub fn from_code(error_code: i32, msg: String) -> Self {
-        match error_code {
-            1 => Self::GeneralError(msg),
-            10 => Self::AuthdAlreadyStarted(msg),
-            20 => Self::Unexpected(msg),
-            code => Self::Unknown((msg, code)),
+    pub fn description(&self) -> &str {
+        use ErrorKind::*;
+        match self {
+            GeneralError => "GeneralError",
+            AuthdAlreadyStarted => "AuthdAlreadyStarted",
+            Unexpected => "Unexpected",
+            Unknown => "Unknown",
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn error_display() {
-        let err = Error::GeneralError("test error".to_string());
-        let s: String = err.into();
-        assert_eq!(s, "[Error] GeneralError - test error");
     }
 }

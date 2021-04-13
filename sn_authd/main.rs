@@ -26,6 +26,7 @@ use update::update_commander;
 #[macro_use]
 extern crate human_panic;
 
+use crate::errors::ErrorKind::GeneralError;
 use operations::{restart_authd, start_authd, stop_authd};
 
 #[derive(StructOpt, Debug)]
@@ -92,7 +93,7 @@ async fn main() {
 
     if let Err(err) = process_command(opt).await {
         error!("sn_authd error: {}", err);
-        process::exit(err.error_code());
+        process::exit(err.code());
     }
 }
 
@@ -102,11 +103,15 @@ async fn process_command(opt: CmdArgs) -> Result<()> {
             // We run this command in a separate thread to overcome a conflict with
             // the self_update crate as it seems to be creating its own runtime.
             let handler = std::thread::spawn(|| {
-                update_commander()
-                    .map_err(|err| Error::GeneralError(format!("Error performing update: {}", err)))
+                update_commander().map_err(|err| {
+                    Error::from_message(GeneralError, format!("Error performing update: {}", err))
+                })
             });
             handler.join().map_err(|err| {
-                Error::GeneralError(format!("Failed to run self update: {:?}", err))
+                Error::from_message(
+                    GeneralError,
+                    format!("Failed to run self update: {:?}", err),
+                )
             })?
         }
         CmdArgs::Start {
