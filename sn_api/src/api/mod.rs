@@ -16,6 +16,10 @@ mod ipc;
 mod authd_client;
 #[cfg(feature = "authenticator")]
 mod authenticator;
+
+#[cfg(feature = "node_rpc_client")]
+mod node_rpc_client;
+
 mod common;
 mod constants;
 mod errors;
@@ -36,6 +40,9 @@ pub use authenticator::*;
 
 #[cfg(feature = "authd_client")]
 pub use authd_client::*;
+
+#[cfg(feature = "node_rpc_client")]
+pub use node_rpc_client::*;
 
 #[cfg(any(feature = "authenticator", feature = "authd_client"))]
 pub use common::auth_types::*;

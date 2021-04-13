@@ -1383,6 +1383,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "805026a5d0141ffc30abb3be3173848ad46a1b1664fe632428479619a3644d77"
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "hex_fmt"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2846,6 +2852,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_with"
+version = "1.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b44be9227e214a0420707c9ca74c2d4991d9955bae9415a8f93f05cebf561be5"
+dependencies = [
+ "hex 0.4.3",
+ "serde",
+]
+
+[[package]]
 name = "serde_yaml"
 version = "0.8.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2956,6 +2972,7 @@ dependencies = [
  "sha3",
  "sn_client",
  "sn_data_types",
+ "sn_node_rpc_data_types",
  "thiserror",
  "tiny-keccak",
  "tokio",
@@ -3095,7 +3112,7 @@ dependencies = [
  "bincode",
  "crdts",
  "ed25519-dalek",
- "hex",
+ "hex 0.3.2",
  "multibase 0.8.0",
  "rand 0.7.3",
  "rand_core 0.5.1",
@@ -3144,6 +3161,16 @@ dependencies = [
  "threshold_crypto",
  "tiny-keccak",
  "xor_name",
+]
+
+[[package]]
+name = "sn_node_rpc_data_types"
+version = "0.0.1"
+source = "git+https://github.com/Scorch-Dev/sn_node_rpc_data_types?branch=master#7a896150f379af97df14cab272275a8bd1cc8d2f"
+dependencies = [
+ "serde",
+ "serde_with",
+ "sn_data_types",
 ]
 
 [[package]]
