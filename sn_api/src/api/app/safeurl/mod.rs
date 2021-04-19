@@ -7,20 +7,22 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use super::{
-    nrs::NRS_MAP_TYPE_TAG,
-    xorurl_media_types::{MEDIA_TYPE_CODES, MEDIA_TYPE_STR},
-    DEFAULT_XORURL_BASE,
+mod url_parts;
+mod xorurl_media_types;
+
+use crate::{
+    api::app::{nrs::NRS_MAP_TYPE_TAG, DEFAULT_XORURL_BASE},
+    Error, Result,
 };
-use crate::{Error, Result};
 use log::{debug, info, trace, warn};
-use multibase::{decode, encode, Base};
+use multibase::{decode as base_decode, encode as base_encode, Base};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use tiny_keccak::sha3_256;
-use uhttp_uri::HttpUri;
+use tiny_keccak::{Hasher, Sha3};
 use url::Url;
+use url_parts::SafeUrlParts;
 use xor_name::{XorName, XOR_NAME_LEN}; // for parsing raw path
+use xorurl_media_types::{MEDIA_TYPE_CODES, MEDIA_TYPE_STR};
 
 const SAFE_URL_PROTOCOL: &str = "safe://";
 const SAFE_URL_SCHEME: &str = "safe";
@@ -31,13 +33,6 @@ const URL_VERSION_QUERY_NAME: &str = "v";
 
 // The XOR-URL type
 pub type XorUrl = String;
-
-// Backwards compatibility for the rest of codebase.
-// A later PR will:
-//  1. rename this file to safeurl.rs
-//  2. change all references in other files
-//  3. remove this alias.
-pub type XorUrlEncoder = SafeUrl;
 
 // Supported base encoding for XOR URLs
 #[derive(Copy, Clone, Debug)]
@@ -165,127 +160,6 @@ impl SafeDataType {
     }
 }
 
-// A simple struct to represent the basic components parsed
-// from a Safe URL without any decoding.
-//
-// This is kept internal to the crate, at least for now.
-#[derive(Debug, Clone)]
-pub(crate) struct SafeUrlParts {
-    pub scheme: String,
-    pub public_name: String, // "a.b.name" in "a.b.name"
-    pub top_name: String,    // "name"     in "a.b.name"
-    pub sub_names: String,   // "a.b"      in "a.b.name"
-    pub sub_names_vec: Vec<String>,
-    pub path: String,
-    pub query_string: String,
-    pub fragment: String,
-}
-
-impl SafeUrlParts {
-    // parses a URL into its component parts, performing basic validation.
-    pub fn parse(url: &str) -> Result<Self> {
-        // Note: we use rust-url for parsing because it is most widely used
-        // in rust ecosystem, and should be quite solid.  However, for paths,
-        // (see below) we use a different parser to avoid normalization.
-        // Parsing twice is inefficient, so there is room for improvement
-        // later to standardize on a single parser.
-        let parsing_url = Url::parse(&url).map_err(|parse_err| {
-            let msg = format!("Problem parsing the URL \"{}\": {}", url, parse_err);
-            Error::InvalidXorUrl(msg)
-        })?;
-
-        // Validate the url scheme is 'safe'
-        let scheme = parsing_url.scheme().to_string();
-        if scheme != SAFE_URL_SCHEME {
-            let msg = format!(
-                "invalid scheme: '{}'. expected: '{}'",
-                scheme, SAFE_URL_SCHEME
-            );
-            return Err(Error::InvalidXorUrl(msg));
-        }
-
-        // validate name (url host) is not empty
-        let public_name = match parsing_url.host_str() {
-            Some(h) => h.to_string(),
-            None => {
-                let msg = format!("Problem parsing the URL \"{}\": {}", url, "missing name");
-                return Err(Error::InvalidXorUrl(msg));
-            }
-        };
-
-        // validate no empty sub names in name.
-        if public_name.find("..").is_some() {
-            let msg = "name contains empty subname".to_string();
-            return Err(Error::InvalidXorUrl(msg));
-        }
-
-        // validate no spaces in name.
-        if public_name.find(' ').is_some() {
-            let msg = "name cannot contain a space".to_string();
-            return Err(Error::InvalidXorUrl(msg));
-        }
-
-        // parse top_name and sub_names from name
-        let names_vec: Vec<String> = public_name.split('.').map(String::from).collect();
-        let top_name = names_vec[names_vec.len() - 1].to_string();
-        let sub_names_vec = (&names_vec[0..names_vec.len() - 1]).to_vec();
-        let sub_names = sub_names_vec.join(".");
-
-        // get raw path, without any normalization.
-        // We use HttpUri for this because rust-url does too
-        // much normalization, eg replacing "../" with no option
-        // to obtain raw path. Issue filed at:
-        //   https://github.com/servo/rust-url/issues/602
-        //
-        // HttpUri only supports http(s) urls,
-        // so we replace first occurrence of safe:// with http://.
-        // This could be improved/optimized at a later time.
-        let http_url = url.replacen("safe://", "http://", 1);
-        let uri = HttpUri::new(&http_url).map_err(|parse_err| {
-            let msg = format!("Problem parsing the URL \"{}\": {:?}", url, parse_err);
-            Error::InvalidXorUrl(msg)
-        })?;
-        let path = uri.resource.path.to_string();
-
-        // get query_params, and fragment
-        let query_string = parsing_url.query().unwrap_or("").to_string();
-        let fragment = parsing_url.fragment().unwrap_or("").to_string();
-
-        // double-slash is allowed but discouraged in regular URLs.
-        // We don't allow them in Safe URLs.
-        // See https://stackoverflow.com/questions/20523318/is-a-url-with-in-the-path-section-valid
-        if path.find("//").is_some() {
-            let msg = "path contains empty component".to_string();
-            return Err(Error::InvalidXorUrl(msg));
-        }
-
-        debug!(
-            "Parsed url: scheme: {}, public_name: {}, top_name: {}, sub_names: {}, sub_names_vec: {:?}, path: {}, query_string: {}, fragment: {}",
-            scheme,
-            public_name,
-            top_name,
-            sub_names,
-            sub_names_vec,
-            path,
-            query_string,
-            fragment,
-        );
-
-        let s = Self {
-            scheme,
-            public_name,
-            sub_names,
-            sub_names_vec,
-            top_name,
-            path,
-            query_string,
-            fragment,
-        };
-
-        Ok(s)
-    }
-}
-
 /// An enumeration of possible SafeUrl types.
 ///
 /// This is the type of safe url itself,
@@ -406,49 +280,46 @@ impl SafeUrl {
         let sub_names_str: String;
         let sub_names_vec: Vec<String>;
         let safeurl_type: SafeUrlType;
-        match nrs_name {
-            Some(nh) => {
-                // we have an nrsurl
-                if nh.is_empty() {
-                    let msg = "nrs_name cannot be empty string.".to_string();
-                    return Err(Error::InvalidInput(msg));
-                }
-                // Validate that nrs_name hash matches xor_name
-                let tmpurl = format!("{}{}", SAFE_URL_PROTOCOL, nh);
-                let parts = SafeUrlParts::parse(&tmpurl)?;
-                let hashed_name = Self::xor_name_from_nrs_string(&parts.top_name)?;
-                if hashed_name != xor_name {
-                    let msg = format!(
-                        "input mis-match. nrs_name `{}` does not hash to xor_name `{}`",
-                        parts.top_name, xor_name
-                    );
-                    return Err(Error::InvalidInput(msg));
-                }
-                public_name = parts.public_name;
-                top_name = parts.top_name;
-                sub_names_str = parts.sub_names;
-                sub_names_vec = parts.sub_names_vec; // use sub_names from nrs_name, ignoring sub_names arg, in case they do not match.
-                safeurl_type = SafeUrlType::NrsUrl;
+        if let Some(nh) = nrs_name {
+            // we have an NRS Url
+            if nh.is_empty() {
+                let msg = "nrs_name cannot be empty string.".to_string();
+                return Err(Error::InvalidInput(msg));
             }
-            None => {
-                // we have an xorurl
-                public_name = String::default(); // set later
-                top_name = String::default(); // set later
-                sub_names_vec = sub_names.unwrap_or_else(Vec::new);
-                sub_names_str = sub_names_vec.join(".");
-                safeurl_type = SafeUrlType::XorUrl;
+            // Validate that nrs_name hash matches xor_name
+            let tmpurl = format!("{}{}", SAFE_URL_PROTOCOL, nh);
+            let parts = SafeUrlParts::parse(&tmpurl, false)?;
+            let hashed_name = Self::xor_name_from_nrs_string(&parts.top_name);
+            if hashed_name != xor_name {
+                let msg = format!(
+                    "input mis-match. nrs_name `{}` does not hash to xor_name `{}`",
+                    parts.top_name, xor_name
+                );
+                return Err(Error::InvalidInput(msg));
+            }
+            public_name = parts.public_name;
+            top_name = parts.top_name;
+            sub_names_str = parts.sub_names;
+            sub_names_vec = parts.sub_names_vec; // use sub_names from nrs_name, ignoring sub_names arg, in case they do not match.
+            safeurl_type = SafeUrlType::NrsUrl;
+        } else {
+            // we have an xorurl
+            public_name = String::default(); // set later
+            top_name = String::default(); // set later
+            sub_names_vec = sub_names.unwrap_or_else(Vec::new);
+            sub_names_str = sub_names_vec.join(".");
+            safeurl_type = SafeUrlType::XorUrl;
 
-                for s in &sub_names_vec {
-                    if s.is_empty() {
-                        let msg = "empty subname".to_string();
-                        return Err(Error::InvalidInput(msg));
-                    }
+            for s in &sub_names_vec {
+                if s.is_empty() {
+                    let msg = "empty subname".to_string();
+                    return Err(Error::InvalidInput(msg));
                 }
             }
         }
 
         // finally, instantiate.
-        let mut x = Self {
+        let mut safe_url = Self {
             encoding_version: XOR_URL_VERSION_1,
             xor_name,
             public_name,
@@ -467,26 +338,31 @@ impl SafeUrl {
         };
 
         // now we can call ::name_to_base(), to generate the top_name.
-        if x.safeurl_type == SafeUrlType::XorUrl {
-            x.top_name = x.name_to_base(DEFAULT_XORURL_BASE, false);
-            let sep = if x.sub_names.is_empty() { "" } else { "." };
-            x.public_name = format!("{}{}{}", x.sub_names(), sep, x.top_name);
+        if safe_url.safeurl_type == SafeUrlType::XorUrl {
+            safe_url.top_name = safe_url.name_to_base(DEFAULT_XORURL_BASE, false);
+            let sep = if safe_url.sub_names.is_empty() {
+                ""
+            } else {
+                "."
+            };
+            safe_url.public_name = format!("{}{}{}", safe_url.sub_names(), sep, safe_url.top_name);
         }
 
         // we call this to add leading slash if needed
         // but we do NOT want percent-encoding as caller
         // must already provide it that way.
-        x.set_path_internal(path.unwrap_or(""), false);
+        safe_url.set_path_internal(path.unwrap_or(""), false);
 
         // we set query_string and content_version using setters to
         // ensure they are in sync.
-        x.set_query_string(query_string.unwrap_or(""))?;
+        safe_url.set_query_string(query_string.unwrap_or(""))?;
 
         // If present, content_version will override ?v in query string.
         if let Some(version) = content_version {
-            x.set_content_version(Some(version));
+            safe_url.set_content_version(Some(version));
         }
-        Ok(x)
+
+        Ok(safe_url)
     }
 
     // A non-member utility function to check if a media-type is currently supported by XOR-URL encoding
@@ -512,17 +388,17 @@ impl SafeUrl {
         }
     }
 
-    /// Parses a safe nrsurl into SafeUrl
+    /// Parses an NRS Url into SafeUrl
     ///
     /// # Arguments
     ///
     /// * `nrsurl` - an nrsurl.
     pub fn from_nrsurl(nrsurl: &str) -> Result<Self> {
-        let parts = SafeUrlParts::parse(&nrsurl)?;
+        let parts = SafeUrlParts::parse(&nrsurl, false)?;
 
-        let hashed_name = Self::xor_name_from_nrs_string(&parts.top_name)?;
+        let hashed_name = Self::xor_name_from_nrs_string(&parts.top_name);
 
-        let x = Self::new(
+        Self::new(
             hashed_name,
             Some(&parts.public_name),
             NRS_MAP_TYPE_TAG,
@@ -533,20 +409,18 @@ impl SafeUrl {
             Some(&parts.query_string),
             Some(&parts.fragment),
             None,
-        )?;
-
-        Ok(x)
+        )
     }
 
-    /// Parses a safe xorurl into SafeUrl
+    /// Parses a XorUrl into SafeUrl
     ///
     /// # Arguments
     ///
     /// * `xorurl` - an xorurl.
     pub fn from_xorurl(xorurl: &str) -> Result<Self> {
-        let parts = SafeUrlParts::parse(&xorurl)?;
+        let parts = SafeUrlParts::parse(&xorurl, true)?;
 
-        let (_base, xorurl_bytes): (Base, Vec<u8>) = decode(&parts.top_name)
+        let (_base, xorurl_bytes): (Base, Vec<u8>) = base_decode(&parts.top_name)
             .map_err(|err| Error::InvalidXorUrl(format!("Failed to decode XOR-URL: {:?}", err)))?;
 
         let type_tag_offset = XOR_NAME_BYTES_OFFSET + XOR_NAME_LEN; // offset where to find the type tag bytes
@@ -628,7 +502,7 @@ impl SafeUrl {
         type_tag_bytes[8 - type_tag_bytes_len..].copy_from_slice(&xorurl_bytes[type_tag_offset..]);
         let type_tag: u64 = u64::from_be_bytes(type_tag_bytes);
 
-        let x = Self::new(
+        Self::new(
             xor_name,
             None, // no nrs_name for an xorurl
             type_tag,
@@ -639,9 +513,7 @@ impl SafeUrl {
             Some(&parts.query_string),
             Some(&parts.fragment),
             None,
-        )?;
-
-        Ok(x)
+        )
     }
 
     /// The url scheme.  Only 'safe' scheme is presently supported.
@@ -720,7 +592,7 @@ impl SafeUrl {
     /// sets sub_names portion of URL
     pub fn set_sub_names(&mut self, sub_names: &str) -> Result<()> {
         let tmpurl = format!("{}{}.{}", SAFE_URL_PROTOCOL, sub_names, self.top_name());
-        let parts = SafeUrlParts::parse(&tmpurl)?;
+        let parts = SafeUrlParts::parse(&tmpurl, false)?;
         self.sub_names = parts.sub_names;
         self.sub_names_vec = parts.sub_names_vec;
         self.public_name = parts.public_name;
@@ -832,9 +704,6 @@ impl SafeUrl {
         self.query_string = pairs.finish();
         trace!("Set query_string: {}", self.query_string);
 
-        if key == URL_VERSION_QUERY_NAME {
-            self.set_content_version_internal(val)?;
-        }
         Ok(())
     }
 
@@ -974,6 +843,7 @@ impl SafeUrl {
             "{}{}{}{}{}",
             SAFE_URL_PROTOCOL, self.public_name, self.path, query_string, fragment
         );
+
         Some(url)
     }
 
@@ -1014,7 +884,7 @@ impl SafeUrl {
             XorUrlBase::Base32 => Base::Base32Lower,
             XorUrlBase::Base64 => Base::Base64,
         };
-        let top_name = encode(base_encoding, cid_vec);
+        let top_name = base_encode(base_encoding, cid_vec);
 
         if include_subnames {
             let sub_names = self.sub_names();
@@ -1047,10 +917,7 @@ impl SafeUrl {
     /// that the present instance passes all validation checks
     pub fn validate(&self) -> Result<()> {
         let s = self.to_string();
-        match Self::from_url(&s) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),
-        }
+        Self::from_url(&s).map(|_| ())
     }
 
     // A non-member encoder function for convenience in some cases
@@ -1068,7 +935,7 @@ impl SafeUrl {
         content_version: Option<u64>,
         base: XorUrlBase,
     ) -> Result<String> {
-        let xorurl_encoder = SafeUrl::new(
+        let safeurl = SafeUrl::new(
             xor_name,
             nrs_name,
             type_tag,
@@ -1080,7 +947,8 @@ impl SafeUrl {
             fragment,
             content_version,
         )?;
-        Ok(xorurl_encoder.to_base(base))
+
+        Ok(safeurl.to_base(base))
     }
 
     // A non-member SafeKey encoder function for convenience
@@ -1304,11 +1172,15 @@ impl SafeUrl {
         }
     }
 
-    fn xor_name_from_nrs_string(name: &str) -> Result<XorName> {
-        let vec_hash = sha3_256(&name.to_string().into_bytes());
+    fn xor_name_from_nrs_string(name: &str) -> XorName {
+        let name_bytes = name.as_bytes();
+        let mut hasher = Sha3::v256();
+        let mut vec_hash = [0; 32];
+        hasher.update(&name_bytes);
+        hasher.finalize(&mut vec_hash);
         let xor_name = XorName(vec_hash);
         debug!("Resulting XorName for NRS \"{}\" is: {}", name, xor_name);
-        Ok(xor_name)
+        xor_name
     }
 }
 
@@ -1342,12 +1214,18 @@ mod tests {
     use super::*;
     use anyhow::{anyhow, bail, Result};
 
+    macro_rules! verify_expected_result {
+            ($result:expr, $pattern:pat $(if $cond:expr)?) => {
+                match $result {
+                    $pattern $(if $cond)? => Ok(()),
+                    other => Err(anyhow!("Expecting {}, got {:?}", stringify!($pattern), other)),
+                }
+            }
+        }
+
     #[test]
     fn test_safeurl_new_validation() -> Result<()> {
         // Tests some errors when calling Self::new()
-
-        let msg = "Expected error";
-        let wrong_err = "Wrong error type";
 
         let xor_name = XorName(*b"12345678901234567890123456789012");
 
@@ -1363,12 +1241,8 @@ mod tests {
             None,
             None,
             None,
-        )
-        .expect_err(msg);
-        match result {
-            Error::InvalidMediaType(e) => assert!(e.contains("You can use 'SafeContentType::Raw'")),
-            _ => bail!(wrong_err.to_string()),
-        }
+        );
+        verify_expected_result!(result, Err(Error::InvalidMediaType(err)) if err.contains("You can use 'SafeContentType::Raw'"))?;
 
         // test: "nrs_name cannot be empty string."
         let result = SafeUrl::new(
@@ -1382,12 +1256,8 @@ mod tests {
             None,
             None,
             None,
-        )
-        .expect_err(msg);
-        match result {
-            Error::InvalidInput(e) => assert!(e.contains("nrs_name cannot be empty string.")),
-            _ => panic!(wrong_err),
-        }
+        );
+        verify_expected_result!(result, Err(Error::InvalidInput(err)) if err.contains("nrs_name cannot be empty string."))?;
 
         // test: "input mis-match. nrs_name `{}` does not hash to xor_name `{}`"
         let result = SafeUrl::new(
@@ -1401,12 +1271,8 @@ mod tests {
             None,
             None,
             None,
-        )
-        .expect_err(msg);
-        match result {
-            Error::InvalidInput(e) => assert!(e.contains("does not hash to xor_name")),
-            _ => panic!(wrong_err),
-        }
+        );
+        verify_expected_result!(result, Err(Error::InvalidInput(err)) if err.contains("does not hash to xor_name"))?;
 
         // test: "Host contains empty subname" (in nrs name)
         let result = SafeUrl::new(
@@ -1420,12 +1286,8 @@ mod tests {
             None,
             None,
             None,
-        )
-        .expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("name contains empty subname")),
-            _ => panic!(wrong_err),
-        }
+        );
+        verify_expected_result!(result, Err(Error::InvalidXorUrl(err)) if err.contains("name contains empty subname"))?;
 
         // test: "empty subname" (in xorurl sub_names)
         let result = SafeUrl::new(
@@ -1439,12 +1301,8 @@ mod tests {
             None,
             None,
             None,
-        )
-        .expect_err(msg);
-        match result {
-            Error::InvalidInput(e) => assert!(e.contains("empty subname")),
-            _ => panic!(wrong_err),
-        }
+        );
+        verify_expected_result!(result, Err(Error::InvalidInput(err)) if err.contains("empty subname"))?;
 
         Ok(())
     }
@@ -1466,7 +1324,7 @@ mod tests {
             XorUrlBase::Base32,
         )?;
         let base32_xorurl =
-            "safe://biaaaatcmrtgq2tmnzyheydcmrtgq2tmnzyheydcmrtgq2tmnzyheydcmvggi6e2srs";
+            "safe://baeaaaajrgiztinjwg44dsmbrgiztinjwg44dsmbrgiztinjwg44dsmbrgktdepcnjiza";
         assert_eq!(xorurl, base32_xorurl);
         Ok(())
     }
@@ -1475,7 +1333,7 @@ mod tests {
     fn test_safeurl_base32z_encoding() -> Result<()> {
         let xor_name = XorName(*b"12345678901234567890123456789012");
         let xorurl = SafeUrl::encode_blob(xor_name, SafeContentType::Raw, XorUrlBase::Base32z)?;
-        let base32z_xorurl = "safe://hbyyyyncj1gc4dkptz8yhuycj1gc4dkptz8yhuycj1gc4dkptz8yhuycj1";
+        let base32z_xorurl = "safe://hyryyyyjtge3uepjsghhd1cbtge3uepjsghhd1cbtge3uepjsghhd1cbtge";
         assert_eq!(xorurl, base32z_xorurl);
         Ok(())
     }
@@ -1490,26 +1348,23 @@ mod tests {
             XorUrlBase::Base64,
             false,
         )?;
-        let base64_xorurl = "safe://mQACAzEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyRfRh";
+        let base64_xorurl = "safe://mAQACAzEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyRfRh";
         assert_eq!(xorurl, base64_xorurl);
-        let xorurl_encoder = SafeUrl::from_url(&base64_xorurl)?;
-        assert_eq!(base64_xorurl, xorurl_encoder.to_base(XorUrlBase::Base64));
-        assert_eq!("", xorurl_encoder.path());
-        assert_eq!(XOR_URL_VERSION_1, xorurl_encoder.encoding_version());
-        assert_eq!(xor_name, xorurl_encoder.xorname());
-        assert_eq!(4_584_545, xorurl_encoder.type_tag());
-        assert_eq!(SafeDataType::PublicSequence, xorurl_encoder.data_type());
-        assert_eq!(
-            SafeContentType::FilesContainer,
-            xorurl_encoder.content_type()
-        );
+        let safeurl = SafeUrl::from_url(&base64_xorurl)?;
+        assert_eq!(base64_xorurl, safeurl.to_base(XorUrlBase::Base64));
+        assert_eq!("", safeurl.path());
+        assert_eq!(XOR_URL_VERSION_1, safeurl.encoding_version());
+        assert_eq!(xor_name, safeurl.xorname());
+        assert_eq!(4_584_545, safeurl.type_tag());
+        assert_eq!(SafeDataType::PublicSequence, safeurl.data_type());
+        assert_eq!(SafeContentType::FilesContainer, safeurl.content_type());
         Ok(())
     }
 
     #[test]
     fn test_safeurl_default_base_encoding() -> Result<()> {
         let xor_name = XorName(*b"12345678901234567890123456789012");
-        let base32z_xorurl = "safe://hbyyyyncj1gc4dkptz8yhuycj1gc4dkptz8yhuycj1gc4dkptz8yhuycj1";
+        let base32z_xorurl = "safe://hyryyyyjtge3uepjsghhd1cbtge3uepjsghhd1cbtge3uepjsghhd1cbtge";
         let xorurl = SafeUrl::encode_blob(xor_name, SafeContentType::Raw, DEFAULT_XORURL_BASE)?;
         assert_eq!(xorurl, base32z_xorurl);
         Ok(())
@@ -1537,17 +1392,17 @@ mod tests {
             Some(5),
             XorUrlBase::Base32z,
         )?;
-        let xorurl_encoder = SafeUrl::from_url(&xorurl)?;
+        let safeurl = SafeUrl::from_url(&xorurl)?;
 
-        assert_eq!(subdirs, xorurl_encoder.path());
-        assert_eq!(XOR_URL_VERSION_1, xorurl_encoder.encoding_version());
-        assert_eq!(xor_name, xorurl_encoder.xorname());
-        assert_eq!(type_tag, xorurl_encoder.type_tag());
-        assert_eq!(SafeDataType::PublicBlob, xorurl_encoder.data_type());
-        assert_eq!(SafeContentType::Raw, xorurl_encoder.content_type());
-        assert_eq!(Some(content_version), xorurl_encoder.content_version());
-        assert_eq!(query_string_v, xorurl_encoder.query_string());
-        assert_eq!(fragment, xorurl_encoder.fragment());
+        assert_eq!(subdirs, safeurl.path());
+        assert_eq!(XOR_URL_VERSION_1, safeurl.encoding_version());
+        assert_eq!(xor_name, safeurl.xorname());
+        assert_eq!(type_tag, safeurl.type_tag());
+        assert_eq!(SafeDataType::PublicBlob, safeurl.data_type());
+        assert_eq!(SafeContentType::Raw, safeurl.content_type());
+        assert_eq!(Some(content_version), safeurl.content_version());
+        assert_eq!(query_string_v, safeurl.query_string());
+        assert_eq!(fragment, safeurl.fragment());
         Ok(())
     }
 
@@ -1564,26 +1419,17 @@ mod tests {
         )?;
 
         let xorurl_with_path = format!("{}/subfolder/file", xorurl);
-        let xorurl_encoder_with_path = SafeUrl::from_url(&xorurl_with_path)?;
+        let safeurl_with_path = SafeUrl::from_url(&xorurl_with_path)?;
         assert_eq!(
             xorurl_with_path,
-            xorurl_encoder_with_path.to_base(XorUrlBase::Base32z)
+            safeurl_with_path.to_base(XorUrlBase::Base32z)
         );
-        assert_eq!("/subfolder/file", xorurl_encoder_with_path.path());
-        assert_eq!(
-            XOR_URL_VERSION_1,
-            xorurl_encoder_with_path.encoding_version()
-        );
-        assert_eq!(xor_name, xorurl_encoder_with_path.xorname());
-        assert_eq!(type_tag, xorurl_encoder_with_path.type_tag());
-        assert_eq!(
-            SafeDataType::PublicSequence,
-            xorurl_encoder_with_path.data_type()
-        );
-        assert_eq!(
-            SafeContentType::Wallet,
-            xorurl_encoder_with_path.content_type()
-        );
+        assert_eq!("/subfolder/file", safeurl_with_path.path());
+        assert_eq!(XOR_URL_VERSION_1, safeurl_with_path.encoding_version());
+        assert_eq!(xor_name, safeurl_with_path.xorname());
+        assert_eq!(type_tag, safeurl_with_path.type_tag());
+        assert_eq!(SafeDataType::PublicSequence, safeurl_with_path.data_type());
+        assert_eq!(SafeContentType::Wallet, safeurl_with_path.content_type());
         Ok(())
     }
 
@@ -1606,19 +1452,19 @@ mod tests {
         )?;
 
         assert!(xorurl_with_subname.contains("safe://sub."));
-        let xorurl_encoder_with_subname = SafeUrl::from_url(&xorurl_with_subname)?;
+        let safeurl_with_subname = SafeUrl::from_url(&xorurl_with_subname)?;
         assert_eq!(
             xorurl_with_subname,
-            xorurl_encoder_with_subname.to_base(XorUrlBase::Base32z)
+            safeurl_with_subname.to_base(XorUrlBase::Base32z)
         );
-        assert_eq!("", xorurl_encoder_with_subname.path());
-        assert_eq!(1, xorurl_encoder_with_subname.encoding_version());
-        assert_eq!(xor_name, xorurl_encoder_with_subname.xorname());
-        assert_eq!(type_tag, xorurl_encoder_with_subname.type_tag());
-        assert_eq!(&["sub"], xorurl_encoder_with_subname.sub_names_vec());
+        assert_eq!("", safeurl_with_subname.path());
+        assert_eq!(1, safeurl_with_subname.encoding_version());
+        assert_eq!(xor_name, safeurl_with_subname.xorname());
+        assert_eq!(type_tag, safeurl_with_subname.type_tag());
+        assert_eq!(&["sub"], safeurl_with_subname.sub_names_vec());
         assert_eq!(
             SafeContentType::NrsMapContainer,
-            xorurl_encoder_with_subname.content_type()
+            safeurl_with_subname.content_type()
         );
         Ok(())
     }
@@ -1632,10 +1478,10 @@ mod tests {
             XorUrlBase::Base32z,
         )?;
 
-        let xorurl_encoder = SafeUrl::from_url(&xorurl)?;
+        let safeurl = SafeUrl::from_url(&xorurl)?;
         assert_eq!(
             SafeContentType::MediaType("text/html".to_string()),
-            xorurl_encoder.content_type()
+            safeurl.content_type()
         );
         Ok(())
     }
@@ -1669,7 +1515,8 @@ mod tests {
             XorUrlBase::Base32z,
         )?;
 
-        let len = xorurl.len() - 1;
+        // TODO: we need to add checksum to be able to detect even 1 single char change
+        let len = xorurl.len() - 2;
         match SafeUrl::from_xorurl(&xorurl[..len]) {
             Ok(_) => Err(anyhow!(
                 "Unexpectedly parsed an invalid (too short) xorurl".to_string(),
@@ -1795,48 +1642,52 @@ mod tests {
     #[test]
     fn test_safeurl_path() -> Result<()> {
         // Make sure we can read percent-encoded paths, and set them as well.
+        // Here we verify that url::Url has the same path encoding behavior
+        // as our implementation...for better or worse.
         let mut x = SafeUrl::from_url("safe://domain/path/to/my%20file.txt?v=1")?;
+        let mut u = Url::parse("safe://domain/path/to/my%20file.txt?v=1").map_err(|e| {
+            Error::InvalidInput(format!(
+                "Unexpectedly failed to parse with third-party Url::parse: {}",
+                e
+            ))
+        })?;
+
         assert_eq!(x.path(), "/path/to/my%20file.txt");
+        assert_eq!(x.path(), u.path());
+
         x.set_path("/path/to/my new file.txt");
-        assert_eq!(x.path(), "/path/to/my%20new%20file.txt");
-        assert_eq!(x.path_decoded()?, "/path/to/my new file.txt");
-        x.set_path("/trailing/slash/");
-        assert_eq!(x.path(), "/trailing/slash/");
-
-        // here we verify that url::Url has the same path encoding behavior
-        // as our implementation.  for better or worse.
-        let mut u = Url::parse("safe://domain/path/to/my%20file.txt?v=1")
-            .map_err(|e| Error::InvalidInput(e.to_string()))?;
-        assert_eq!(u.path(), "/path/to/my%20file.txt");
         u.set_path("/path/to/my new file.txt");
-        assert_eq!(u.path(), "/path/to/my%20new%20file.txt");
+        assert_eq!(x.path(), "/path/to/my%20new%20file.txt");
+        assert_eq!(x.path(), u.path());
+        assert_eq!(x.path_decoded()?, "/path/to/my new file.txt");
+
+        x.set_path("/trailing/slash/");
         u.set_path("/trailing/slash/");
-        assert_eq!(u.path(), "/trailing/slash/");
+        assert_eq!(x.path(), "/trailing/slash/");
+        assert_eq!(x.path(), u.path());
 
-        // note: our impl and url::Url differ with no-leading-slash behavior.
-        // we prepend leading slash when storing and return a changed path.
-        // some SAFE code appears to depend on this presently.
         x.set_path("no-leading-slash");
-        assert_eq!(x.path(), "/no-leading-slash");
-        assert_eq!(x.to_string(), "safe://domain/no-leading-slash?v=1");
-        x.set_path("");
-        assert_eq!(x.path(), ""); // no slash if path is empty.
-        assert_eq!(x.to_string(), "safe://domain?v=1");
-        x.set_path("/");
-        assert_eq!(x.path(), ""); // slash removed if path otherwise empty.
-        assert_eq!(x.to_string(), "safe://domain?v=1");
-
-        // url::Url preserves the missing slash, and allows path to
-        // merge with domain.  seems kind of broken.  bug?
         u.set_path("no-leading-slash");
-        assert_eq!(u.path(), "no-leading-slash");
-        assert_eq!(u.to_string(), "safe://domainno-leading-slash?v=1");
+        assert_eq!(x.path(), "/no-leading-slash");
+        assert_eq!(x.path(), u.path());
+        assert_eq!(x.to_string(), "safe://domain/no-leading-slash?v=1");
+        assert_eq!(x.to_string(), u.to_string());
+
+        x.set_path("");
         u.set_path("");
-        assert_eq!(u.path(), "");
+        assert_eq!(x.path(), ""); // no slash if path is empty.
+        assert_eq!(x.path(), u.path());
         assert_eq!(x.to_string(), "safe://domain?v=1");
+        assert_eq!(x.to_string(), u.to_string());
+
+        // TODO: url::Url preserves the missing slash, and allows path to
+        // merge with domain...seems kind of broken.  bug?
+        x.set_path("/");
         u.set_path("/");
-        assert_eq!(u.path(), "/");
+        assert_eq!(x.path(), "");
+        assert_eq!(u.path(), "/"); // slash removed if path otherwise empty.
         assert_eq!(x.to_string(), "safe://domain?v=1"); // note that slash in path omitted.
+        assert_eq!(u.to_string(), "safe://domain/?v=1");
 
         Ok(())
     }
@@ -1845,7 +1696,7 @@ mod tests {
     fn test_safeurl_to_string() -> Result<()> {
         // These two are equivalent.  ie, the xorurl is the result of nrs.to_xorurl_string()
         let nrsurl = "safe://my.sub.domain/path/my%20dir/my%20file.txt?this=that&this=other&color=blue&v=5&name=John+Doe#somefragment";
-        let xorurl = "safe://my.sub.hnyydypixsfrqix9aoqg97jebuzc6748uc8rykhdd5hjrtg5o4xso9jmggbqh/path/my%20dir/my%20file.txt?this=that&this=other&color=blue&v=5&name=John+Doe#somefragment";
+        let xorurl = "safe://my.sub.hyryygy5k9cke7k99tyhp941od8q375wxgaqeyiag8za1jnpzbw9pb61sccn7a/path/my%20dir/my%20file.txt?this=that&this=other&color=blue&v=5&name=John+Doe#somefragment";
 
         let nrs = SafeUrl::from_url(nrsurl)?;
         let xor = SafeUrl::from_url(xorurl)?;
@@ -1918,59 +1769,36 @@ mod tests {
         // Tests basic URL syntax errors that are common to
         // both ::from_xorurl() and ::from_nrsurl()
 
-        let msg = "Expected error";
-        let wrong_err = "Wrong error type";
-        let should_work = "should work";
+        let result = SafeUrl::from_url("withoutscheme");
+        verify_expected_result!(result, Err(Error::InvalidXorUrl(err)) if err.contains("relative URL without a base"))?;
 
-        let result = SafeUrl::from_url("withoutscheme").expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("relative URL without a base")),
-            _ => panic!(wrong_err),
-        }
+        let result = SafeUrl::from_url("http://badscheme");
+        verify_expected_result!(result, Err(Error::InvalidXorUrl(err)) if err.contains("invalid scheme"))?;
 
-        let result = SafeUrl::from_url("http://badscheme").expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("invalid scheme")),
-            _ => panic!(wrong_err),
-        }
+        let result = SafeUrl::from_url("safe:///emptyname");
+        verify_expected_result!(result, Err(Error::InvalidXorUrl(err)) if err.contains("missing name"))?;
 
-        let result = SafeUrl::from_url("safe:///emptyname").expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("missing name")),
-            _ => panic!(wrong_err),
-        }
+        let result = SafeUrl::from_url("safe://space in name");
+        verify_expected_result!(result, Err(Error::InvalidInput(err)) if err.contains("The URL cannot contain whitespace"))?;
 
-        let result = SafeUrl::from_url("safe://space in name").expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("invalid domain character")),
-            _ => panic!(wrong_err),
-        }
+        let result = SafeUrl::from_url("safe://my.sub..name");
+        verify_expected_result!(result, Err(Error::InvalidXorUrl(err)) if err.contains("name contains empty subname"))?;
 
-        let result = SafeUrl::from_url("safe://my.sub..name").expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("name contains empty subname")),
-            _ => panic!(wrong_err),
-        }
-
-        let result = SafeUrl::from_url("safe://name//").expect_err(msg);
-        match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("path contains empty component")),
-            _ => panic!(wrong_err),
-        }
+        let result = SafeUrl::from_url("safe://name//");
+        verify_expected_result!(result, Err(Error::InvalidXorUrl(err)) if err.contains("path contains empty component"))?;
 
         // note: ?? is actually ok in a standard url.  I suppose no harm in allowing for safe
         // see:  https://stackoverflow.com/questions/2924160/is-it-valid-to-have-more-than-one-question-mark-in-a-url
-        let _result = SafeUrl::from_url("safe://name??foo=bar").expect(should_work);
+        SafeUrl::from_url("safe://name??foo=bar")?;
 
         // note: ## and #frag1#frag2 are accepted by rust URL parser.
         // tbd: if we want to disallow.
         // see: https://stackoverflow.com/questions/10850781/multiple-hash-signs-in-url
-        let _result = SafeUrl::from_url("safe://name?foo=bar##fragment").expect(should_work);
+        SafeUrl::from_url("safe://name?foo=bar##fragment")?;
 
         // note: single%percent/in/path is accepted by rust URL parser.
         // tbd: if we want to disallow.
-        let _result =
-            SafeUrl::from_nrsurl("safe://name/single%percent/in/path").expect(should_work);
+        SafeUrl::from_nrsurl("safe://name/single%percent/in/path")?;
 
         Ok(())
     }
@@ -1996,7 +1824,7 @@ mod tests {
         .expect_err(msg);
         println!("{:#?}", result);
         match result {
-            Error::InvalidXorUrl(e) => assert!(e.contains("invalid domain character")),
+            Error::InvalidInput(e) => assert!(e.contains("The URL cannot contain whitespace")),
             _ => bail!(wrong_err),
         }
 

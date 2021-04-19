@@ -15,22 +15,22 @@ use crate::{
     },
     Error, Result, SafeAuthReq,
 };
-
 use hmac::Hmac;
 use log::{debug, info, trace};
 use rand::rngs::{OsRng, StdRng};
 use rand_core::SeedableRng;
 use sha3::Sha3_256;
-use sn_client::{
-    client::{bootstrap_config, Client},
-    ClientError,
-};
+use sn_client::{client::Client, Error as ClientError, ErrorMessage::NoSuchEntry};
 use sn_data_types::{
-    Error::NoSuchEntry, Keypair, MapAction, MapAddress, MapEntryActions, MapPermissionSet,
-    MapSeqEntryActions, MapValue, Money,
+    Keypair, MapAction, MapAddress, MapEntryActions, MapPermissionSet, MapSeqEntryActions,
+    MapValue, Token,
 };
-use std::{collections::BTreeMap, sync::Arc};
-use tiny_keccak::{sha3_256, sha3_512};
+use std::{
+    collections::{BTreeMap, HashSet},
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
+use tiny_keccak::{Hasher, Sha3};
 use xor_name::{XorName, XOR_NAME_LEN};
 
 const SHA3_512_HASH_LEN: usize = 64;
@@ -41,69 +41,61 @@ const SAFE_TYPE_TAG: u64 = 1_300;
 // Number of testcoins (in nano) for any new keypair when simulated-payouts is enabled.
 const DEFAULT_TEST_COINS_AMOUNT: u64 = 777_000_000_000;
 
-/// Derive Password, Keyword and PIN (in order).
+/// Derive Passphrase, Password and Salt (in order).
 pub fn derive_secrets(acc_passphrase: &[u8], acc_password: &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
-    let passphrase_hash = sha3_512(acc_passphrase);
+    let mut passphrase_hasher = Sha3::v512();
+    let mut passphrase_hash = [0; SHA3_512_HASH_LEN];
+    passphrase_hasher.update(&acc_passphrase);
+    passphrase_hasher.finalize(&mut passphrase_hash);
+    let passphrase = passphrase_hash.to_vec();
 
-    // what is the PIN for here?
-    let pin = sha3_512(&passphrase_hash[SHA3_512_HASH_LEN / 2..]).to_vec();
-    let keyword = passphrase_hash.to_vec();
-    let password = sha3_512(acc_password).to_vec();
+    let mut salt_hasher = Sha3::v512();
+    let mut salt_hash = [0; SHA3_512_HASH_LEN];
+    let salt_bytes = &passphrase_hash[SHA3_512_HASH_LEN / 2..];
+    salt_hasher.update(&salt_bytes);
+    salt_hasher.finalize(&mut salt_hash);
+    let salt = salt_hash.to_vec();
 
-    (password, keyword, pin)
+    let mut password_hasher = Sha3::v512();
+    let mut password_hash = [0; SHA3_512_HASH_LEN];
+    password_hasher.update(&acc_password);
+    password_hasher.finalize(&mut password_hash);
+    let password = password_hash.to_vec();
+
+    (passphrase, password, salt)
 }
 
 /// Create a new Ed25519 keypair from seed
 fn create_ed25519_keypair_from_seed(seeder: &[u8]) -> Keypair {
-    let seed = sha3_256(seeder);
+    let mut hasher = Sha3::v256();
+    let mut seed = [0; 32];
+    hasher.update(&seeder);
+    hasher.finalize(&mut seed);
     let mut rng = StdRng::from_seed(seed);
     Keypair::new_ed25519(&mut rng)
 }
 
-/// Create a new BLS keypair from seed
-#[allow(dead_code)]
-fn create_bls_keypair_from_seed(seeder: &[u8]) -> Keypair {
-    let seed = sha3_256(seeder);
-    let mut rng = StdRng::from_seed(seed);
-
-    Keypair::new_bls(&mut rng)
-}
-
 /// Perform all derivations and seeding to deterministically obtain location and Keypair from input
-pub fn derive_location_and_keypair(
-    passphrase: &str,
-    password: &str,
-) -> Result<(XorName, Arc<Keypair>)> {
-    let (password, keyword, salt) = derive_secrets(passphrase.as_bytes(), password.as_bytes());
+pub fn derive_location_and_keypair(passphrase: &str, password: &str) -> Result<(XorName, Keypair)> {
+    let (passphrase, password, salt) = derive_secrets(passphrase.as_bytes(), password.as_bytes());
 
-    let map_data_location = generate_network_address(&keyword, &salt)?;
+    let map_data_location = generate_network_address(&passphrase, &salt)?;
 
     let mut seed = password;
     seed.extend(salt.iter());
-    let keypair = Arc::new(create_ed25519_keypair_from_seed(&seed));
+    let keypair = create_ed25519_keypair_from_seed(&seed);
 
     Ok((map_data_location, keypair))
 }
 
-// /// use password based crypto
-// fn derive_key(output: &mut [u8], input: &[u8], user_salt: &[u8]) {
-//     const ITERATIONS: usize = 10000;
-
-//     let salt = sha3_256(user_salt);
-//     pbkdf2::pbkdf2::<Hmac<Sha3_256>>(input, &salt, ITERATIONS, output)
-// }
-
 /// Generates User's Identity for the network using supplied credentials in
 /// a deterministic way.  This is similar to the username in various places.
-pub fn generate_network_address(keyword: &[u8], pin: &[u8]) -> Result<XorName> {
+pub fn generate_network_address(passphrase: &[u8], salt: &[u8]) -> Result<XorName> {
     let mut id = XorName([0; XOR_NAME_LEN]);
 
-    const ITERATIONS: usize = 10000;
+    const ITERATIONS: u32 = 10_000u32;
 
-    let _salt = sha3_256(pin);
-    pbkdf2::pbkdf2::<Hmac<Sha3_256>>(keyword, &pin, ITERATIONS, &mut id.0[..]);
-
-    // Self::derive_key(&mut id.0[..], keyword, pin);
+    pbkdf2::pbkdf2::<Hmac<Sha3_256>>(passphrase, &salt, ITERATIONS, &mut id.0[..]);
 
     Ok(id)
 }
@@ -114,15 +106,22 @@ pub struct SafeAuthenticator {
     // We keep the client instantiated with the derived keypair, along
     // with the address of the Map which holds its Safe on the network.
     safe: Option<(Client, MapAddress)>,
+    config_path: Option<PathBuf>,
+    bootstrap_contacts: Option<HashSet<SocketAddr>>,
 }
 
 impl SafeAuthenticator {
-    pub fn new(config_dir_path: Option<&str>) -> Self {
-        if let Some(path) = config_dir_path {
-            sn_client::config_handler::set_config_dir_path(path);
-        }
+    pub fn new(
+        config_dir_path: Option<&Path>,
+        bootstrap_contacts: Option<HashSet<SocketAddr>>,
+    ) -> Self {
+        let config_path = config_dir_path.map(|p| p.to_path_buf());
 
-        Self { safe: None }
+        Self {
+            safe: None,
+            config_path,
+            bootstrap_contacts,
+        }
     }
 
     /// # Create Safe
@@ -186,21 +185,26 @@ impl SafeAuthenticator {
 
         debug!("Creating Safe to be owned by PublicKey: {:?}", data_owner);
 
-        let mut client = Client::new(Some(keypair), None).await?;
+        let mut client = Client::new(
+            Some(keypair),
+            self.config_path.as_deref(),
+            self.bootstrap_contacts.clone(),
+        )
+        .await?;
         trace!("Client instantiated properly!");
 
         // check if client data already exists
         // TODO: Use a more reliable test for existing data...
         let existing_balance = client.get_balance().await?;
 
-        if existing_balance != Money::from_nano(0) {
+        if existing_balance != Token::from_nano(0) {
             return Err(Error::AuthenticatorError(
                 "Client data already exists".to_string(),
             ));
         }
 
         client
-            .trigger_simulated_farming_payout(Money::from_nano(DEFAULT_TEST_COINS_AMOUNT))
+            .trigger_simulated_farming_payout(Token::from_nano(DEFAULT_TEST_COINS_AMOUNT))
             .await?;
 
         // Create Map data to store the list of keypairs generated for
@@ -228,7 +232,7 @@ impl SafeAuthenticator {
             .map_err(|err| {
                 Error::AuthenticatorError(format!("Failed to store Safe on a Map: {}", err))
             })?;
-        debug!("Map stored successfully for new Safe at: {:?}", map_address);
+        debug!("Map stored successfully for new Safe!");
 
         self.safe = Some((client, map_address));
         Ok(())
@@ -285,7 +289,12 @@ impl SafeAuthenticator {
             keypair.public_key()
         );
 
-        let client = Client::new(Some(keypair), None).await?;
+        let client = Client::new(
+            Some(keypair),
+            self.config_path.as_deref(),
+            self.bootstrap_contacts.clone(),
+        )
+        .await?;
         trace!("Client instantiated properly!");
 
         let map_address = MapAddress::Seq {
@@ -348,7 +357,7 @@ impl SafeAuthenticator {
 
         match ipc_req {
             IpcMsg::Req(IpcReq::Auth(app_auth_req)) => {
-                info!("Request was recognised as a general app auth request");
+                info!("Request was recognised as an application auth request");
                 debug!("Decoded request: {:?}", app_auth_req);
                 self.gen_auth_response(app_auth_req).await
             }
@@ -370,11 +379,19 @@ impl SafeAuthenticator {
     /// If the app is found, then the `AuthGranted` struct is returned based on that information.
     /// If the app is not found in the Safe, then it will be authenticated.
     pub async fn authenticate(&self, auth_req: AuthReq) -> Result<AuthGranted> {
+        debug!(
+            "Retrieving/generating keypair for an application: {:?}",
+            auth_req
+        );
         if let Some((client, map_address)) = &self.safe {
             let app_id = auth_req.app_id.as_bytes().to_vec();
             let keypair = match client.get_map_value(*map_address, app_id.clone()).await {
                 Ok(value) => {
                     // This app already has its own keypair
+                    trace!(
+                        "The app ('{}') already has a Keypair in the Safe",
+                        auth_req.app_id
+                    );
 
                     // TODO: support for scenario when app was previously revoked,
                     // in which case we should generate a new keypair
@@ -389,13 +406,12 @@ impl SafeAuthenticator {
                                 .to_string(),
                         )
                     })?;
-                    let keypair: Arc<Keypair> =
-                        Arc::new(serde_json::from_str(&keypair_str).map_err(|_err| {
-                            Error::AuthError(
-                                "The Safe contains an invalid keypair associated to this app"
-                                    .to_string(),
-                            )
-                        })?);
+                    let keypair: Keypair = serde_json::from_str(&keypair_str).map_err(|_err| {
+                        Error::AuthError(
+                            "The Safe contains an invalid keypair associated to this app"
+                                .to_string(),
+                        )
+                    })?;
 
                     debug!(
                         "Keypair for the app being authorised ('{}') retrieved from the Safe: {}",
@@ -405,9 +421,13 @@ impl SafeAuthenticator {
 
                     keypair
                 }
-                Err(ClientError::DataError(NoSuchEntry)) => {
+                Err(ClientError::ErrorMessage(NoSuchEntry)) => {
                     // This is the first time this app is being authorised,
                     // thus let's generate a keypair for it
+                    trace!(
+                        "The app ('{}') was not assigned a Keypair yet in the Safe. Generating one for it...",
+                        auth_req.app_id
+                    );
                     let mut rng = OsRng;
                     let keypair = Keypair::new_ed25519(&mut rng);
 
@@ -418,7 +438,6 @@ impl SafeAuthenticator {
                         ))
                     })?;
 
-                    let keypair = Arc::new(keypair);
                     debug!(
                         "New keypair generated for app ('{}') being authorised: {}",
                         auth_req.app_id,
@@ -429,9 +448,14 @@ impl SafeAuthenticator {
                     // TODO: we may want to allow different options here, either accept
                     // a proof of payment from the requester, transfer from the Safe's balance,
                     // or simply allocate testcoins as it's now.
-                    let mut tmp_client = Client::new(Some(keypair.clone()), None).await?;
+                    let mut tmp_client = Client::new(
+                        Some(keypair.clone()),
+                        self.config_path.as_deref(),
+                        self.bootstrap_contacts.clone(),
+                    )
+                    .await?;
                     tmp_client
-                        .trigger_simulated_farming_payout(Money::from_nano(
+                        .trigger_simulated_farming_payout(Token::from_nano(
                             DEFAULT_TEST_COINS_AMOUNT,
                         ))
                         .await?;
@@ -456,7 +480,7 @@ impl SafeAuthenticator {
 
             Ok(AuthGranted {
                 app_keypair: keypair,
-                bootstrap_config: bootstrap_config()?,
+                bootstrap_config: self.bootstrap_contacts.clone(),
             })
         } else {
             Err(Error::AuthenticatorError(
@@ -486,18 +510,16 @@ impl SafeAuthenticator {
 
     // Helper function to generate an unregistered authorisation response
     fn gen_unreg_auth_response(&self) -> Result<String> {
-        let bootstrap_cfg = bootstrap_config().map_err(|err| {
-            Error::AuthenticatorError(format!(
-                "Failed to obtain bootstrap info for response: {}",
-                err
-            ))
+        let bootstrap_contacts = self.bootstrap_contacts.clone().ok_or_else(|| {
+            Error::AuthenticatorError("Bootstrap contacts information not available".to_string())
         })?;
 
-        debug!("Encoding response... {:?}", bootstrap_cfg);
-        let resp = serde_json::to_string(&IpcMsg::Resp(IpcResp::Unregistered(Ok(bootstrap_cfg))))
-            .map_err(|err| {
-            Error::AuthenticatorError(format!("Failed to encode response: {:?}", err))
-        })?;
+        debug!("Encoding response... {:?}", bootstrap_contacts);
+        let resp =
+            serde_json::to_string(&IpcMsg::Resp(IpcResp::Unregistered(Ok(bootstrap_contacts))))
+                .map_err(|err| {
+                    Error::AuthenticatorError(format!("Failed to encode response: {:?}", err))
+                })?;
 
         debug!("Returning unregistered auth response generated: {:?}", resp);
         Ok(resp)

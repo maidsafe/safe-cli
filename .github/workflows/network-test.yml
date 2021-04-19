@@ -15,9 +15,8 @@ jobs:
     # if: ${{ github.repository_owner == 'maidsafe' }}
     name: E2E against real network
     runs-on: ubuntu-latest
-    if: false
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -32,8 +31,8 @@ jobs:
         run: cargo build --release
       - name: Setup Safe Cli and PATH etc
         run: |
-          mkdir -p ~/.safe/cli
-          mkdir -p ~/.safe/authd
+          mkdir -p $HOME/.safe/cli
+          mkdir -p $HOME/.safe/authd
           cp ./target/release/safe $HOME/.safe/cli/
           cp ./target/release/sn_authd $HOME/.safe/authd/
           ls $HOME/.safe/cli
@@ -48,11 +47,12 @@ jobs:
         run : safe node run-baby-fleming -t
 
       - name: Run CLI Tests
+        if: false
         run: ./resources/test-scripts/cli-tests
         shell: bash
 
-      - name: Run API Tests	
-        run: ./resources/test-scripts/api-tests	
+      - name: Run API Tests
+        run: ./resources/test-scripts/api-tests
         shell: bash
 
       - name: Stop the network.

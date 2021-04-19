@@ -7,250 +7,38 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use super::{
-    consts::*,
-    fetch::Range,
-    helpers::{gen_timestamp_secs, systemtime_to_rfc3339},
-    xorurl::{SafeContentType, SafeDataType},
-    Safe,
-};
+mod file_system;
+mod files_map;
+mod metadata;
+mod realpath;
+
 use crate::{
-    xorurl::{XorUrl, XorUrlEncoder},
+    api::{
+        app::consts::*,
+        fetch::Range,
+        safeurl::{SafeContentType, SafeDataType, SafeUrl, XorUrl},
+        Safe,
+    },
     Error, Result,
 };
+use file_system::{file_system_dir_walk, file_system_single_file, normalise_path_separator};
+use files_map::add_or_update_file_item;
 use log::{debug, info, warn};
 use relative_path::RelativePath;
 use std::{collections::BTreeMap, fs, path::Path};
-use walkdir::{DirEntry, WalkDir};
 
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+pub(crate) use metadata::FileMeta;
+pub(crate) use realpath::RealPath;
 
-// Each FileItem contains file metadata and the link to the file's Blob XOR-URL
-pub type FileItem = BTreeMap<String, String>;
-
-// A trait to get an key attr and return an API Result
-pub trait GetAttr {
-    fn getattr(&self, key: &str) -> Result<&str>;
-}
-
-impl GetAttr for FileItem {
-    // Makes it more readable to conditionally get an attribute from a FileItem
-    // because we can call it in API funcs like fileitem.getattr("key")?;
-    fn getattr(&self, key: &str) -> Result<&str> {
-        match self.get(key) {
-            Some(v) => Ok(v),
-            None => Err(Error::EntryNotFound(format!("key not found: {}", key))),
-        }
-    }
-}
-
-// To use for mapping files names (with path in a flattened hierarchy) to FileItems
-pub type FilesMap = BTreeMap<String, FileItem>;
+pub use files_map::{FileItem, FilesMap, GetAttr};
 
 // List of files uploaded with details if they were added, updated or deleted from FilesContainer
 pub type ProcessedFiles = BTreeMap<String, (String, String)>;
-
-// Represents file metadata.  Simplifies passing it around.
-// note: all values are String or Option<String>
-// to facilitate use with FileItem.
-pub(crate) struct FileMeta {
-    created: String,
-    modified: String,
-    file_size: String,
-    file_type: String,
-    readonly: Option<String>,
-    mode_bits: Option<String>,
-    original_created: Option<String>,
-    original_modified: Option<String>,
-}
-
-impl FileMeta {
-    // Instantiates FileMeta from a local filesystem path.
-    pub(crate) fn from_path(path: &str, follow_links: bool) -> Result<Self> {
-        let (metadata, file_type) = get_metadata(&Path::new(path), follow_links)?;
-
-        // created and modified may not be available on all platforms/filesystems.
-        let original_created = if let Ok(time) = metadata.created() {
-            Some(systemtime_to_rfc3339(&time))
-        } else {
-            None
-        };
-        let original_modified = if let Ok(time) = metadata.modified() {
-            Some(systemtime_to_rfc3339(&time))
-        } else {
-            None
-        };
-        let readonly = Some(metadata.permissions().readonly().to_string());
-
-        // We use 0 as file_size for metadata such as directories, symlinks.
-        let file_size = if metadata.file_type().is_file() {
-            metadata.len().to_string()
-        } else {
-            "0".to_string()
-        };
-
-        #[cfg(windows)]
-        let mode_bits = None; // Todo:  what does git do for windows?
-
-        #[cfg(not(windows))]
-        let mode_bits = Some(metadata.permissions().mode().to_string());
-
-        let s = Self {
-            created: gen_timestamp_secs(),
-            modified: gen_timestamp_secs(),
-            file_size,
-            file_type,
-            readonly,
-            mode_bits,
-            original_created,
-            original_modified,
-        };
-        Ok(s)
-    }
-
-    // Instantiates FileMeta from a FileItem
-    pub(crate) fn from_file_item(file_item: &FileItem) -> Self {
-        // The first 4 must be present, else a crash.
-        // lots of other code relies on this, so big refactor
-        // would be needed to change it.
-        let created = file_item[FAKE_RDF_PREDICATE_CREATED].to_string();
-        let modified = file_item[FAKE_RDF_PREDICATE_MODIFIED].to_string();
-        let file_size = file_item[FAKE_RDF_PREDICATE_SIZE].to_string();
-        let file_type = file_item[FAKE_RDF_PREDICATE_TYPE].to_string();
-
-        // These are all Option<String>
-        let original_created = file_item
-            .get(FAKE_RDF_PREDICATE_ORIGINAL_CREATED)
-            .map(ToOwned::to_owned);
-        let original_modified = file_item
-            .get(FAKE_RDF_PREDICATE_ORIGINAL_MODIFIED)
-            .map(ToOwned::to_owned);
-        let readonly = file_item
-            .get(FAKE_RDF_PREDICATE_READONLY)
-            .map(ToOwned::to_owned);
-        let mode_bits = file_item
-            .get(FAKE_RDF_PREDICATE_MODE_BITS)
-            .map(ToOwned::to_owned);
-
-        Self {
-            created,
-            modified,
-            file_size,
-            file_type,
-            readonly,
-            mode_bits,
-            original_created,
-            original_modified,
-        }
-    }
-
-    // Instantiates FileMeta from just type and size properties.
-    pub(crate) fn from_type_and_size(file_type: &str, file_size: &str) -> Self {
-        Self {
-            created: gen_timestamp_secs(),
-            modified: gen_timestamp_secs(),
-            file_size: file_size.to_string(),
-            file_type: file_type.to_string(),
-            readonly: None,
-            mode_bits: None,
-            original_created: None,
-            original_modified: None,
-        }
-    }
-
-    // converts Self to FileItem
-    pub(crate) fn to_file_item(&self) -> FileItem {
-        let mut file_item = FileItem::new();
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_CREATED,
-            Some(self.created.clone()),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_MODIFIED,
-            Some(self.modified.clone()),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_SIZE,
-            Some(self.file_size.clone()),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_TYPE,
-            Some(self.file_type.clone()),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_READONLY,
-            self.readonly.clone(),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_MODE_BITS,
-            self.mode_bits.clone(),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_ORIGINAL_CREATED,
-            self.original_created.clone(),
-        );
-        Self::add_to_fileitem(
-            &mut file_item,
-            FAKE_RDF_PREDICATE_ORIGINAL_MODIFIED,
-            self.original_modified.clone(),
-        );
-
-        file_item
-    }
-
-    // returns false if a directory or symlink, true if anything else (a file).
-    pub(crate) fn filetype_is_file(file_type: &str) -> bool {
-        !matches!(
-            file_type,
-            MIMETYPE_FILESYSTEM_DIR | MIMETYPE_FILESYSTEM_SYMLINK
-        )
-    }
-
-    // returns false if a directory or symlink, true if anything else (a file).
-    pub(crate) fn filetype_is_symlink(file_type: &str) -> bool {
-        file_type == MIMETYPE_FILESYSTEM_SYMLINK
-    }
-
-    // returns false if a directory or symlink, true if anything else (a file).
-    pub(crate) fn filetype_is_dir(file_type: &str) -> bool {
-        file_type == MIMETYPE_FILESYSTEM_DIR
-    }
-
-    // returns false if a directory or symlink, true if anything else (a file).
-    pub(crate) fn is_file(&self) -> bool {
-        Self::filetype_is_file(&self.file_type)
-    }
-
-    pub(crate) fn is_symlink(&self) -> bool {
-        Self::filetype_is_symlink(&self.file_type)
-    }
-
-    pub(crate) fn is_dir(&self) -> bool {
-        Self::filetype_is_dir(&self.file_type)
-    }
-
-    // helper: adds property to FileItem if val.is_some()
-    fn add_to_fileitem(file_item: &mut FileItem, key: &str, val: Option<String>) {
-        if let Some(v) = val {
-            file_item.insert(key.to_string(), v);
-        }
-    }
-}
 
 // Type tag to use for the FilesContainer stored on Sequence
 const FILES_CONTAINER_TYPE_TAG: u64 = 1_100;
 
 const ERROR_MSG_NO_FILES_CONTAINER_FOUND: &str = "No FilesContainer found at this address";
-
-const MAX_RECURSIVE_DEPTH: usize = 10_000;
 
 impl Safe {
     /// # Create a FilesContainer.
@@ -283,8 +71,8 @@ impl Safe {
                 let mut processed_files =
                     file_system_dir_walk(self, path, recursive, follow_links, dry_run).await?;
 
-                // The FilesContainer is created as a Sequence with a single entry containing the
-                // timestamp as the entry's key, and the serialised FilesMap as the entry's value
+                // The FilesContainer is stored on a Sequence
+                // and the link to the serialised FilesMap as the entry's value
                 // TODO: use RDF format
                 let files_map = files_map_create(
                     self,
@@ -303,18 +91,15 @@ impl Safe {
         let xorurl = if dry_run {
             "".to_string()
         } else {
-            let serialised_files_map = serde_json::to_string(&files_map).map_err(|err| {
-                Error::Serialisation(format!(
-                    "Couldn't serialise the FilesMap generated: {:?}",
-                    err
-                ))
-            })?;
+            // Store the serialised FilesMap in a Public Blob
+            let files_map_xorurl = self.store_files_map(&files_map).await?;
 
-            // Store the FilesContainer in a Public Sequence
+            // Store the FilesContainer in a Public Sequence, putting the
+            // serialised FilesMap XOR-URL as the first entry value
             let xorname = self
                 .safe_client
                 .store_sequence(
-                    serialised_files_map.as_bytes(),
+                    files_map_xorurl.as_bytes(),
                     None,
                     FILES_CONTAINER_TYPE_TAG,
                     None,
@@ -322,7 +107,7 @@ impl Safe {
                 )
                 .await?;
 
-            XorUrlEncoder::encode_sequence_data(
+            SafeUrl::encode_sequence_data(
                 xorname,
                 FILES_CONTAINER_TYPE_TAG,
                 SafeContentType::FilesContainer,
@@ -351,34 +136,45 @@ impl Safe {
     /// ```
     pub async fn files_container_get(&mut self, url: &str) -> Result<(u64, FilesMap)> {
         debug!("Getting files container from: {:?}", url);
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let (safe_url, _) = self.parse_and_resolve_url(url).await?;
 
-        self.fetch_files_container(&xorurl_encoder).await
+        self.fetch_files_container(&safe_url).await
     }
 
-    /// Fetch a FilesContainer from a XorUrlEncoder without performing any type of URL resolution
+    /// Fetch a FilesContainer from a SafeUrl without performing any type of URL resolution
     pub(crate) async fn fetch_files_container(
         &mut self,
-        xorurl_encoder: &XorUrlEncoder,
+        safe_url: &SafeUrl,
     ) -> Result<(u64, FilesMap)> {
         // Check if the URL specifies a specific version of the content or simply the latest available
-        match self.fetch_sequence(xorurl_encoder).await {
+        match self.fetch_sequence(safe_url).await {
             Ok((version, serialised_files_map)) => {
                 debug!("Files map retrieved.... v{:?}", &version);
                 // TODO: use RDF format and deserialise it
-                let files_map = serde_json::from_str(&String::from_utf8_lossy(
-                    &serialised_files_map.as_slice(),
-                ))
-                .map_err(|err| {
-                    Error::ContentError(format!(
-                        "Couldn't deserialise the FilesMap stored in the FilesContainer: {:?}",
-                        err
-                    ))
-                })?;
+                // We first obtain the FilesMap XOR-URL from the Sequence
+                let files_map_xorurl = SafeUrl::from_url(
+                    &String::from_utf8(serialised_files_map).map_err(|err| {
+                        Error::ContentError(format!(
+                            "Couldn't parse the FilesMap link stored in the FilesContainer: {:?}",
+                            err
+                        ))
+                    })?,
+                )?;
+
+                // Using the FilesMap XOR-URL we can now fetch the FilesMap and deserialise it
+                let serialised_files_map = self.fetch_public_blob(&files_map_xorurl, None).await?;
+                let files_map =
+                    serde_json::from_slice(serialised_files_map.as_slice()).map_err(|err| {
+                        Error::ContentError(format!(
+                            "Couldn't deserialise the FilesMap stored in the FilesContainer: {:?}",
+                            err
+                        ))
+                    })?;
+
                 Ok((version, files_map))
             }
             Err(Error::EmptyContent(_)) => {
-                warn!("FilesContainer found at \"{:?}\" was empty", xorurl_encoder);
+                warn!("FilesContainer found at \"{:?}\" was empty", safe_url);
                 Ok((0, FilesMap::default()))
             }
             Err(Error::ContentNotFound(_)) => Err(Error::ContentNotFound(
@@ -386,8 +182,8 @@ impl Safe {
             )),
             Err(Error::VersionNotFound(_)) => Err(Error::VersionNotFound(format!(
                 "Version '{}' is invalid for FilesContainer found at \"{}\"",
-                xorurl_encoder.content_version().unwrap_or(0),
-                xorurl_encoder,
+                safe_url.content_version().unwrap_or(0),
+                safe_url,
             ))),
             Err(err) => Err(Error::NetDataError(format!(
                 "Failed to get current version: {}",
@@ -429,35 +225,35 @@ impl Safe {
             ));
         }
 
-        let xorurl_encoder = Safe::parse_url(url)?;
-        if xorurl_encoder.content_version().is_some() {
+        let safe_url = Safe::parse_url(url)?;
+        if safe_url.content_version().is_some() {
             return Err(Error::InvalidInput(format!(
-                "The target URL cannot cannot contain a version: {}",
+                "The target URL cannot contain a version: {}",
                 url
             )));
         };
 
         // If NRS name shall be updated then the URL has to be an NRS-URL
-        if update_nrs && xorurl_encoder.content_type() != SafeContentType::NrsMapContainer {
+        if update_nrs && safe_url.content_type() != SafeContentType::NrsMapContainer {
             return Err(Error::InvalidInput(
                 "'update-nrs' is not allowed since the URL provided is not an NRS URL".to_string(),
             ));
         }
 
-        let (mut xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let (mut safe_url, _) = self.parse_and_resolve_url(url).await?;
 
         // If the FilesContainer URL was resolved from an NRS name we need to remove
         // the version from it so we can fetch latest version of it for sync-ing
-        xorurl_encoder.set_content_version(None);
+        safe_url.set_content_version(None);
 
         let (current_version, current_files_map): (u64, FilesMap) =
-            self.fetch_files_container(&xorurl_encoder).await?;
+            self.fetch_files_container(&safe_url).await?;
 
         // Let's generate the list of local files paths, without uploading any new file yet
         let processed_files =
             file_system_dir_walk(self, location, recursive, follow_links, true).await?;
 
-        let dest_path = Some(xorurl_encoder.path());
+        let dest_path = Some(safe_url.path());
 
         let (processed_files, new_files_map, success_count): (ProcessedFiles, FilesMap, u64) =
             files_map_sync(
@@ -480,7 +276,7 @@ impl Safe {
                 current_version,
                 &new_files_map,
                 url,
-                xorurl_encoder,
+                safe_url,
                 dry_run,
                 update_nrs,
             )
@@ -515,10 +311,10 @@ impl Safe {
         follow_links: bool,
         dry_run: bool,
     ) -> Result<(u64, ProcessedFiles, FilesMap)> {
-        let (xorurl_encoder, current_version, current_files_map) =
+        let (safe_url, current_version, current_files_map) =
             validate_files_add_params(self, source_file, url, update_nrs).await?;
 
-        let dest_path = xorurl_encoder.path();
+        let dest_path = safe_url.path();
 
         // Let's act according to if it's a local file path or a safe:// location
         let (processed_files, new_files_map, success_count) = if source_file.starts_with("safe://")
@@ -549,7 +345,7 @@ impl Safe {
                 current_version,
                 &new_files_map,
                 url,
-                xorurl_encoder,
+                safe_url,
                 dry_run,
                 update_nrs,
             )
@@ -583,10 +379,10 @@ impl Safe {
         update_nrs: bool,
         dry_run: bool,
     ) -> Result<(u64, ProcessedFiles, FilesMap)> {
-        let (xorurl_encoder, current_version, current_files_map) =
+        let (safe_url, current_version, current_files_map) =
             validate_files_add_params(self, "", url, update_nrs).await?;
 
-        let dest_path = xorurl_encoder.path();
+        let dest_path = safe_url.path();
         let new_file_xorurl = self.files_store_public_blob(data, None, false).await?;
 
         // Let's act according to if it's a local file path or a safe:// location
@@ -598,7 +394,7 @@ impl Safe {
                 current_version,
                 &new_files_map,
                 url,
-                xorurl_encoder,
+                safe_url,
                 dry_run,
                 update_nrs,
             )
@@ -631,15 +427,15 @@ impl Safe {
         update_nrs: bool,
         dry_run: bool,
     ) -> Result<(u64, ProcessedFiles, FilesMap)> {
-        let xorurl_encoder = Safe::parse_url(url)?;
-        if xorurl_encoder.content_version().is_some() {
+        let safe_url = Safe::parse_url(url)?;
+        if safe_url.content_version().is_some() {
             return Err(Error::InvalidInput(format!(
-                "The target URL cannot cannot contain a version: {}",
+                "The target URL cannot contain a version: {}",
                 url
             )));
         };
 
-        let dest_path = xorurl_encoder.path();
+        let dest_path = safe_url.path();
         if dest_path.is_empty() {
             return Err(Error::InvalidInput(
                 "The destination URL should include a target file path".to_string(),
@@ -647,20 +443,20 @@ impl Safe {
         }
 
         // If NRS name shall be updated then the URL has to be an NRS-URL
-        if update_nrs && xorurl_encoder.content_type() != SafeContentType::NrsMapContainer {
+        if update_nrs && safe_url.content_type() != SafeContentType::NrsMapContainer {
             return Err(Error::InvalidInput(
                 "'update-nrs' is not allowed since the URL provided is not an NRS URL".to_string(),
             ));
         }
 
-        let (mut xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let (mut safe_url, _) = self.parse_and_resolve_url(url).await?;
 
         // If the FilesContainer URL was resolved from an NRS name we need to remove
         // the version from it so we can fetch latest version of it
-        xorurl_encoder.set_content_version(None);
+        safe_url.set_content_version(None);
 
         let (current_version, files_map): (u64, FilesMap) =
-            self.fetch_files_container(&xorurl_encoder).await?;
+            self.fetch_files_container(&safe_url).await?;
 
         let (processed_files, new_files_map, success_count) =
             files_map_remove_path(dest_path, files_map, recursive)?;
@@ -671,7 +467,7 @@ impl Safe {
                 current_version,
                 &new_files_map,
                 url,
-                xorurl_encoder,
+                safe_url,
                 dry_run,
                 update_nrs,
             )
@@ -689,7 +485,7 @@ impl Safe {
         current_version: u64,
         new_files_map: &FilesMap,
         url: &str,
-        mut xorurl_encoder: XorUrlEncoder,
+        mut safe_url: SafeUrl,
         dry_run: bool,
         update_nrs: bool,
     ) -> Result<u64> {
@@ -698,19 +494,14 @@ impl Safe {
         } else if dry_run {
             current_version + 1
         } else {
-            // The FilesContainer is updated by adding an entry containing the timestamp as the
-            // entry's key, and the serialised new version of the FilesMap as the entry's value
-            let serialised_files_map = serde_json::to_string(new_files_map).map_err(|err| {
-                Error::Serialisation(format!(
-                    "Couldn't serialise the FilesMap generated: {:?}",
-                    err
-                ))
-            })?;
+            // The FilesContainer is updated by adding an entry containing the link to
+            // the Blob with the serialised new version of the FilesMap.
+            let files_map_xorurl = self.store_files_map(new_files_map).await?;
 
-            let xorname = xorurl_encoder.xorname();
-            let type_tag = xorurl_encoder.type_tag();
+            let xorname = safe_url.xorname();
+            let type_tag = safe_url.type_tag();
             self.safe_client
-                .append_to_sequence(serialised_files_map.as_bytes(), xorname, type_tag, false)
+                .append_to_sequence(files_map_xorurl.as_bytes(), xorname, type_tag, false)
                 .await?;
 
             let new_version = current_version + 1;
@@ -718,8 +509,8 @@ impl Safe {
             if update_nrs {
                 // We need to update the link in the NRS container as well,
                 // to link it to the new new_version of the FilesContainer we just generated
-                xorurl_encoder.set_content_version(Some(new_version));
-                let new_link_for_nrs = xorurl_encoder.to_string();
+                safe_url.set_content_version(Some(new_version));
+                let new_link_for_nrs = safe_url.to_string();
                 let _ = self
                     .nrs_map_container_add(url, &new_link_for_nrs, false, true, false)
                     .await?;
@@ -755,7 +546,7 @@ impl Safe {
         let content_type = media_type.map_or_else(
             || Ok(SafeContentType::Raw),
             |media_type_str| {
-                if XorUrlEncoder::is_media_type_supported(media_type_str) {
+                if SafeUrl::is_media_type_supported(media_type_str) {
                     Ok(SafeContentType::MediaType(media_type_str.to_string()))
                 } else {
                     Err(Error::InvalidMediaType(format!(
@@ -769,7 +560,7 @@ impl Safe {
         // TODO: do we want ownership from other PKs yet?
         let xorname = self.safe_client.store_public_blob(&data, dry_run).await?;
 
-        XorUrlEncoder::encode_blob(xorname, content_type, self.xorurl_base)
+        SafeUrl::encode_blob(xorname, content_type, self.xorurl_base)
     }
 
     /// # Get a Public Blob
@@ -789,19 +580,37 @@ impl Safe {
     /// ```
     pub async fn files_get_public_blob(&mut self, url: &str, range: Range) -> Result<Vec<u8>> {
         // TODO: do we want ownership from other PKs yet?
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
-        self.fetch_public_blob(&xorurl_encoder, range).await
+        let (safe_url, _) = self.parse_and_resolve_url(url).await?;
+        self.fetch_public_blob(&safe_url, range).await
     }
 
-    /// Fetch an Blob from a XorUrlEncoder without performing any type of URL resolution
+    /// Fetch an Blob from a SafeUrl without performing any type of URL resolution
     pub(crate) async fn fetch_public_blob(
         &mut self,
-        xorurl_encoder: &XorUrlEncoder,
+        safe_url: &SafeUrl,
         range: Range,
     ) -> Result<Vec<u8>> {
         self.safe_client
-            .get_public_blob(xorurl_encoder.xorname(), range)
+            .get_public_blob(safe_url.xorname(), range)
             .await
+    }
+
+    // Private helper to serialise a FilesMap and store it in a Public Blob
+    async fn store_files_map(&mut self, files_map: &FilesMap) -> Result<String> {
+        // The FilesMapContainer is a Sequence where each NRS Map version is
+        // an entry containing the XOR-URL of the Blob that contains the serialised NrsMap.
+        // TODO: use RDF format
+        let serialised_files_map = serde_json::to_string(&files_map).map_err(|err| {
+            Error::Serialisation(format!(
+                "Couldn't serialise the FilesMap generated: {:?}",
+                err
+            ))
+        })?;
+        let files_map_xorurl = self
+            .files_store_public_blob(serialised_files_map.as_bytes(), None, false)
+            .await?;
+
+        Ok(files_map_xorurl)
     }
 }
 
@@ -813,41 +622,41 @@ async fn validate_files_add_params(
     source_file: &str,
     url: &str,
     update_nrs: bool,
-) -> Result<(XorUrlEncoder, u64, FilesMap)> {
-    let xorurl_encoder = Safe::parse_url(url)?;
-    if xorurl_encoder.content_version().is_some() {
+) -> Result<(SafeUrl, u64, FilesMap)> {
+    let safe_url = Safe::parse_url(url)?;
+    if safe_url.content_version().is_some() {
         return Err(Error::InvalidInput(format!(
-            "The target URL cannot cannot contain a version: {}",
+            "The target URL cannot contain a version: {}",
             url
         )));
     };
 
     // If NRS name shall be updated then the URL has to be an NRS-URL
-    if update_nrs && xorurl_encoder.content_type() != SafeContentType::NrsMapContainer {
+    if update_nrs && safe_url.content_type() != SafeContentType::NrsMapContainer {
         return Err(Error::InvalidInput(
             "'update-nrs' is not allowed since the URL provided is not an NRS URL".to_string(),
         ));
     }
 
-    let (mut xorurl_encoder, _) = safe.parse_and_resolve_url(url).await?;
+    let (mut safe_url, _) = safe.parse_and_resolve_url(url).await?;
 
     // If the FilesContainer URL was resolved from an NRS name we need to remove
     // the version from it so we can fetch latest version of it for sync-ing
-    xorurl_encoder.set_content_version(None);
+    safe_url.set_content_version(None);
 
     let (current_version, current_files_map): (u64, FilesMap) =
-        safe.fetch_files_container(&xorurl_encoder).await?;
+        safe.fetch_files_container(&safe_url).await?;
 
-    let dest_path = xorurl_encoder.path().to_string();
+    let dest_path = safe_url.path().to_string();
 
     // Let's act according to if it's a local file path or a safe:// location
     if source_file.starts_with("safe://") {
-        let source_xorurl_encoder = Safe::parse_url(source_file)?;
-        if source_xorurl_encoder.data_type() != SafeDataType::PublicBlob {
+        let source_safe_url = Safe::parse_url(source_file)?;
+        if source_safe_url.data_type() != SafeDataType::PublicBlob {
             return Err(Error::InvalidInput(format!(
                 "The source URL should target a file ('{}'), but the URL provided targets a '{}'",
                 SafeDataType::PublicBlob,
-                source_xorurl_encoder.content_type()
+                source_safe_url.content_type()
             )));
         }
 
@@ -858,17 +667,12 @@ async fn validate_files_add_params(
             ));
         }
     }
-    Ok((xorurl_encoder, current_version, current_files_map))
-}
-
-// Simply change Windows style path separator into `/`
-fn normalise_path_separator(from: &str) -> String {
-    str::replace(&from, "\\", "/")
+    Ok((safe_url, current_version, current_files_map))
 }
 
 // From the location path and the destination path chosen by the user, calculate
 // the destination path considering ending '/' in both the  location and dest path
-fn get_base_paths(location: &str, dest_path: Option<&str>) -> Result<(String, String)> {
+fn get_base_paths(location: &str, dest_path: Option<&str>) -> (String, String) {
     // Let's normalise the path to use '/' (instead of '\' as on Windows)
     let location_base_path = if location == "." {
         "./".to_string()
@@ -902,116 +706,7 @@ fn get_base_paths(location: &str, dest_path: Option<&str>) -> Result<(String, St
         format!("{}/", new_dest_path)
     };
 
-    Ok((location_base_path, dest_base_path))
-}
-
-// Generate a FileItem for a file which can then be added to a FilesMap
-// This is now a pseudo-RDF but will eventually be converted to be an RDF graph
-async fn gen_new_file_item(
-    safe: &mut Safe,
-    file_path: &Path,
-    file_meta: &FileMeta,
-    link: Option<&str>, // must be symlink target or None if FileMeta::is_symlink() is true.
-    dry_run: bool,
-) -> Result<FileItem> {
-    let mut file_item = file_meta.to_file_item();
-    if file_meta.is_file() {
-        let xorurl = match link {
-            None => upload_file_to_net(safe, file_path, dry_run).await?,
-            Some(link) => link.to_string(),
-        };
-        file_item.insert(FAKE_RDF_PREDICATE_LINK.to_string(), xorurl);
-    } else if file_meta.is_symlink() {
-        // get metadata, with any symlinks resolved.
-        let result = fs::metadata(&file_path);
-        let symlink_target_type = match result {
-            Ok(meta) => {
-                if meta.is_dir() {
-                    "dir"
-                } else {
-                    "file"
-                }
-            }
-            Err(_) => "unknown", // this occurs for a broken link.  on windows, this would be fixed by: https://github.com/rust-lang/rust/pull/47956
-                                 // on unix, there is no way to know if broken link points to file or dir, though we could guess, based on if it has an extension or not.
-        };
-        let target_path = match link {
-            Some(target) => target.to_string(),
-            None => {
-                let target_path = fs::read_link(&file_path).map_err(|e| {
-                    Error::FileSystemError(format!(
-                        "Unable to read link: {}.  {:#?}",
-                        file_path.display(),
-                        e
-                    ))
-                })?;
-                normalise_path_separator(&target_path.display().to_string())
-            }
-        };
-        file_item.insert("symlink_target".to_string(), target_path);
-        // This is a hint for windows-platform clients to be able to call
-        //   symlink_dir() or symlink_file().  on unix, there's no need.
-        file_item.insert(
-            "symlink_target_type".to_string(),
-            symlink_target_type.to_string(),
-        );
-    }
-
-    Ok(file_item)
-}
-
-// Helper function to add or update a FileItem in a FilesMap
-#[allow(clippy::too_many_arguments)]
-async fn add_or_update_file_item(
-    safe: &mut Safe,
-    file_name: &str,
-    file_name_for_map: &str,
-    file_path: &Path,
-    file_meta: &FileMeta,
-    file_link: Option<&str>,
-    name_exists: bool,
-    dry_run: bool,
-    files_map: &mut FilesMap,
-    processed_files: &mut ProcessedFiles,
-) -> bool {
-    // We need to add a new FileItem, let's generate the FileItem first
-    match gen_new_file_item(safe, file_path, file_meta, file_link, dry_run).await {
-        Ok(new_file_item) => {
-            let content_added_sign = if name_exists {
-                CONTENT_UPDATED_SIGN.to_string()
-            } else {
-                CONTENT_ADDED_SIGN.to_string()
-            };
-
-            debug!("New FileItem item: {:?}", new_file_item);
-            debug!("New FileItem item inserted as {:?}", file_name);
-            files_map.insert(file_name_for_map.to_string(), new_file_item.clone());
-
-            processed_files.insert(
-                file_name.to_string(),
-                (
-                    content_added_sign,
-                    // note: files have link property,
-                    //       dirs and symlinks do not
-                    new_file_item
-                        .get(FAKE_RDF_PREDICATE_LINK)
-                        .unwrap_or(&String::default())
-                        .to_string(),
-                ),
-            );
-
-            true
-        }
-        Err(err) => {
-            processed_files.insert(
-                file_name.to_string(),
-                (CONTENT_ERROR_SIGN.to_string(), format!("<{}>", err)),
-            );
-            info!("Skipping file \"{}\": {:?}", file_link.unwrap_or(""), err);
-
-            false
-        }
-    }
+    (location_base_path, dest_base_path)
 }
 
 // From the provided list of local files paths, find the local changes made in comparison with the
@@ -1030,7 +725,7 @@ async fn files_map_sync(
     compare_file_content: bool,
     follow_links: bool,
 ) -> Result<(ProcessedFiles, FilesMap, u64)> {
-    let (location_base_path, dest_base_path) = get_base_paths(location, dest_path)?;
+    let (location_base_path, dest_base_path) = get_base_paths(location, dest_path);
     let mut updated_files_map = FilesMap::new();
     let mut processed_files = ProcessedFiles::new();
     let mut success_count = 0;
@@ -1174,7 +869,7 @@ async fn files_map_sync(
                     // note: files have link property,
                     //       dirs and symlinks do not
                     file_item
-                        .get(FAKE_RDF_PREDICATE_LINK)
+                        .get(PREDICATE_LINK)
                         .unwrap_or(&String::default())
                         .to_string(),
                 ),
@@ -1191,9 +886,9 @@ async fn is_file_item_modified(
     local_filename: &Path,
     file_item: &FileItem,
 ) -> bool {
-    if FileMeta::filetype_is_file(&file_item[FAKE_RDF_PREDICATE_TYPE]) {
+    if FileMeta::filetype_is_file(&file_item[PREDICATE_TYPE]) {
         match upload_file_to_net(safe, local_filename, true /* dry-run */).await {
-            Ok(local_xorurl) => file_item[FAKE_RDF_PREDICATE_LINK] != local_xorurl,
+            Ok(local_xorurl) => file_item[PREDICATE_LINK] != local_xorurl,
             Err(_err) => false,
         }
     } else {
@@ -1216,7 +911,7 @@ async fn files_map_add_link(
 ) -> Result<(ProcessedFiles, FilesMap, u64)> {
     let mut processed_files = ProcessedFiles::new();
     let mut success_count = 0;
-    match XorUrlEncoder::from_url(file_link) {
+    match SafeUrl::from_url(file_link) {
         Err(err) => {
             processed_files.insert(
                 file_link.to_string(),
@@ -1225,9 +920,9 @@ async fn files_map_add_link(
             info!("Skipping file \"{}\". {}", file_link, err);
             Ok((processed_files, files_map, success_count))
         }
-        Ok(xorurl_encoder) => {
+        Ok(safe_url) => {
             let file_path = Path::new("");
-            let file_type = match xorurl_encoder.content_type() {
+            let file_type = match safe_url.content_type() {
                 SafeContentType::MediaType(media_type) => media_type,
                 other => format!("{}", other),
             };
@@ -1241,7 +936,7 @@ async fn files_map_add_link(
                     file_meta.file_size = file_size.to_string();
 
                     let is_modified = if file_meta.is_file() {
-                        current_file_item[FAKE_RDF_PREDICATE_LINK] != file_link
+                        current_file_item[PREDICATE_LINK] != file_link
                     } else {
                         // directory: nothing to check.
                         // symlink: TODO: check if sym-link path has changed.
@@ -1335,7 +1030,7 @@ fn files_map_remove_path(
                         // note: files have link property,
                         //       dirs and symlinks do not
                         file_item
-                            .get(FAKE_RDF_PREDICATE_LINK)
+                            .get(PREDICATE_LINK)
                             .unwrap_or(&String::default())
                             .to_string(),
                     ),
@@ -1360,7 +1055,7 @@ fn files_map_remove_path(
                 // note: files have link property,
                 //       dirs and symlinks do not
                 file_item
-                    .get(FAKE_RDF_PREDICATE_LINK)
+                    .get(PREDICATE_LINK)
                     .unwrap_or(&String::default())
                     .to_string(),
             ),
@@ -1394,190 +1089,6 @@ async fn upload_file_to_net(safe: &mut Safe, path: &Path, dry_run: bool) -> Resu
     }
 }
 
-// Get file metadata from local filesystem
-fn get_metadata(path: &Path, follow_links: bool) -> Result<(fs::Metadata, String)> {
-    let result = if follow_links {
-        fs::metadata(path)
-    } else {
-        fs::symlink_metadata(path)
-    };
-    let metadata = result.map_err(|err| {
-        Error::FileSystemError(format!(
-            "Couldn't read metadata from source path ('{}'): {}",
-            path.display(),
-            err
-        ))
-    })?;
-    debug!("Metadata for location: {:?}", metadata);
-
-    let media_type = get_media_type(path, &metadata);
-    Ok((metadata, media_type))
-}
-
-fn get_media_type(path: &Path, meta: &fs::Metadata) -> String {
-    // see: https://stackoverflow.com/questions/18869772/mime-type-for-a-directory
-    // We will use the FreeDesktop standard for directories and symlinks.
-    //   https://specifications.freedesktop.org/shared-mime-info-spec/shared-mime-info-spec-latest.html#idm140625828597376
-    if meta.file_type().is_dir() {
-        return MIMETYPE_FILESYSTEM_DIR.to_string();
-    } else if meta.file_type().is_symlink() {
-        return MIMETYPE_FILESYSTEM_SYMLINK.to_string();
-    }
-    let mime_type = mime_guess::from_path(&path);
-    let media_type = mime_type.first_raw().unwrap_or("Raw");
-    media_type.to_string()
-}
-
-// Walk the local filesystem starting from `location`, creating a list of files paths,
-// and if not requested as a `dry_run` upload the files to the network filling up
-// the list of files with their corresponding XOR-URLs
-async fn file_system_dir_walk(
-    safe: &mut Safe,
-    location: &str,
-    recursive: bool,
-    follow_links: bool,
-    dry_run: bool,
-) -> Result<ProcessedFiles> {
-    let file_path = Path::new(location);
-    info!("Reading files from {}", file_path.display());
-    let (metadata, _) = get_metadata(&file_path, follow_links)?;
-    if metadata.is_dir() || !recursive {
-        // TODO: option to enable following symlinks?
-        // We now compare both FilesMaps to upload the missing files
-        let max_depth = if recursive { MAX_RECURSIVE_DEPTH } else { 1 };
-        let mut processed_files = BTreeMap::new();
-        let children_to_process = WalkDir::new(file_path)
-            .follow_links(follow_links)
-            .into_iter()
-            .filter_entry(|e| valid_depth(e, max_depth))
-            .filter_map(|v| v.ok());
-
-        for (idx, child) in children_to_process.enumerate() {
-            let current_file_path = child.path();
-            let current_path_str = current_file_path.to_str().unwrap_or("").to_string();
-            info!("Processing {}...", current_path_str);
-            let normalised_path = normalise_path_separator(&current_path_str);
-
-            let result = get_metadata(&current_file_path, follow_links);
-            match result {
-                Ok((metadata, _)) => {
-                    if metadata.file_type().is_dir() {
-                        if idx == 0 && normalised_path.ends_with('/') {
-                            // If the first directory ends with '/' then it is
-                            // the root, and we are only interested in the children,
-                            // so we skip it.
-                            continue;
-                        }
-                        if !recursive {
-                            // We do not include sub-dirs unless recursing.
-                            continue;
-                        }
-                        // Everything is in the iter. We dont need to recurse.
-                        //
-                        // so what do we do with dirs? We don't upload them as immutable data.
-                        // They are only a type of metadata in the FileContainer.
-                        // Empty dirs are not reflected in the paths of uploaded files.
-                        // We include dirs with an empty xorurl.
-                        // Callers can inspect the file's metadata.
-                        processed_files.insert(
-                            normalised_path.clone(),
-                            (CONTENT_ADDED_SIGN.to_string(), String::default()),
-                        );
-                    }
-                    if metadata.file_type().is_symlink() {
-                        processed_files.insert(
-                            normalised_path.clone(),
-                            (CONTENT_ADDED_SIGN.to_string(), String::default()),
-                        );
-                    }
-                    if metadata.file_type().is_file() {
-                        match upload_file_to_net(safe, &current_file_path, dry_run).await {
-                            Ok(xorurl) => {
-                                processed_files.insert(
-                                    normalised_path,
-                                    (CONTENT_ADDED_SIGN.to_string(), xorurl),
-                                );
-                            }
-                            Err(err) => {
-                                processed_files.insert(
-                                    normalised_path.clone(),
-                                    (CONTENT_ERROR_SIGN.to_string(), format!("<{}>", err)),
-                                );
-                                info!("Skipping file \"{}\". {}", normalised_path, err);
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    processed_files.insert(
-                        normalised_path.clone(),
-                        (CONTENT_ERROR_SIGN.to_string(), format!("<{}>", err)),
-                    );
-                    info!(
-                        "Skipping file \"{}\" since no metadata could be read from local location: {:?}",
-                        normalised_path, err);
-                }
-            }
-        }
-
-        Ok(processed_files)
-    } else {
-        // Recursive only works on a dir path. Let's error as the user may be making a mistake
-        // so it's better for the user to double check and either provide the correct path
-        // or remove the 'recursive' flag from the args
-        Err(Error::InvalidInput(format!(
-            "'{}' is not a directory. The \"recursive\" arg is only supported for folders.",
-            location
-        )))
-    }
-}
-
-// Checks if the depth in the dir hierarchy is under a threshold
-fn valid_depth(entry: &DirEntry, max_depth: usize) -> bool {
-    entry
-        .file_name()
-        .to_str()
-        .map(|_| entry.depth() <= max_depth)
-        .unwrap_or(false)
-}
-
-// Read the local filesystem at `location`, creating a list of one single file's path,
-// and if not as a `dry_run` upload the file to the network and putting
-// the obtained XOR-URL in the single file list returned
-async fn file_system_single_file(
-    safe: &mut Safe,
-    location: &str,
-    dry_run: bool,
-) -> Result<ProcessedFiles> {
-    let file_path = Path::new(location);
-    info!("Reading file {}", file_path.display());
-    let (metadata, _) = get_metadata(&file_path, true)?; // follows symlinks.
-
-    // We now compare both FilesMaps to upload the missing files
-    let mut processed_files = BTreeMap::new();
-    let normalised_path = normalise_path_separator(file_path.to_str().unwrap_or(""));
-    if metadata.is_dir() {
-        Err(Error::InvalidInput(format!(
-            "'{}' is a directory, only individual files can be added. Use files sync operation for uploading folders",
-            location
-        )))
-    } else {
-        match upload_file_to_net(safe, &file_path, dry_run).await {
-            Ok(xorurl) => {
-                processed_files.insert(normalised_path, (CONTENT_ADDED_SIGN.to_string(), xorurl));
-            }
-            Err(err) => {
-                processed_files.insert(
-                    normalised_path.clone(),
-                    (CONTENT_ERROR_SIGN.to_string(), format!("<{}>", err)),
-                );
-                info!("Skipping file \"{}\". {}", normalised_path, err);
-            }
-        };
-        Ok(processed_files)
-    }
-}
-
 // From the provided list of local files paths and corresponding files XOR-URLs,
 // create a FilesMap with file's metadata and their corresponding links
 async fn files_map_create(
@@ -1590,7 +1101,7 @@ async fn files_map_create(
 ) -> Result<FilesMap> {
     let mut files_map = FilesMap::default();
 
-    let (location_base_path, dest_base_path) = get_base_paths(location, dest_path)?;
+    let (location_base_path, dest_base_path) = get_base_paths(location, dest_path);
 
     // We want to iterate over the BTreeMap and also modify it.
     // We DON'T want to clone/dup the whole thing, might be very big.
@@ -1640,7 +1151,10 @@ async fn files_map_create(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::app::test_helpers::{new_safe_instance, random_nrs_name};
+    use crate::{
+        api::app::test_helpers::{new_safe_instance, random_nrs_name},
+        retry_loop, retry_loop_for_pattern,
+    };
     use anyhow::{anyhow, bail, Result};
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
@@ -1655,8 +1169,8 @@ mod tests {
     async fn test_files_map_create() -> Result<()> {
         let mut safe = new_safe_instance().await?;
         let mut processed_files = ProcessedFiles::new();
-        let first_xorurl = XorUrlEncoder::from_url("safe://top_xorurl")?.to_xorurl_string();
-        let second_xorurl = XorUrlEncoder::from_url("safe://second_xorurl")?.to_xorurl_string();
+        let first_xorurl = SafeUrl::from_url("safe://top_xorurl")?.to_xorurl_string();
+        let second_xorurl = SafeUrl::from_url("safe://second_xorurl")?.to_xorurl_string();
 
         processed_files.insert(
             "../testdata/test.md".to_string(),
@@ -1677,14 +1191,14 @@ mod tests {
         .await?;
         assert_eq!(files_map.len(), 2);
         let file_item1 = &files_map["/testdata/test.md"];
-        assert_eq!(file_item1[FAKE_RDF_PREDICATE_LINK], first_xorurl);
-        assert_eq!(file_item1[FAKE_RDF_PREDICATE_TYPE], "text/markdown");
-        assert_eq!(file_item1[FAKE_RDF_PREDICATE_SIZE], "12");
+        assert_eq!(file_item1[PREDICATE_LINK], first_xorurl);
+        assert_eq!(file_item1[PREDICATE_TYPE], "text/markdown");
+        assert_eq!(file_item1[PREDICATE_SIZE], "12");
 
         let file_item2 = &files_map["/testdata/subfolder/subexists.md"];
-        assert_eq!(file_item2[FAKE_RDF_PREDICATE_LINK], second_xorurl);
-        assert_eq!(file_item2[FAKE_RDF_PREDICATE_TYPE], "text/markdown");
-        assert_eq!(file_item2[FAKE_RDF_PREDICATE_SIZE], "23");
+        assert_eq!(file_item2[PREDICATE_LINK], second_xorurl);
+        assert_eq!(file_item2[PREDICATE_TYPE], "text/markdown");
+        assert_eq!(file_item2[PREDICATE_SIZE], "23");
         Ok(())
     }
 
@@ -1699,6 +1213,8 @@ mod tests {
         assert_eq!(processed_files.len(), 0);
         assert_eq!(files_map.len(), 0);
 
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
+
         // let's add a file
         let (version, new_processed_files, new_files_map) = safe
             .files_container_add("../testdata/test.md", &xorurl, false, false, false, false)
@@ -1712,8 +1228,9 @@ mod tests {
         assert_eq!(new_processed_files[filename].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename].1,
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1727,7 +1244,7 @@ mod tests {
             .files_store_public_blob(random_blob_content.as_bytes(), None, false)
             .await?;
 
-        let retrieved = safe.files_get_public_blob(&file_xorurl, None).await?;
+        let retrieved = retry_loop!(safe.files_get_public_blob(&file_xorurl, None));
         assert_eq!(retrieved, random_blob_content.as_bytes());
 
         Ok(())
@@ -1748,8 +1265,9 @@ mod tests {
         assert_eq!(processed_files[filename].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename].1,
-            files_map[file_path][FAKE_RDF_PREDICATE_LINK]
+            files_map[file_path][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1770,7 +1288,7 @@ mod tests {
         assert!(!processed_files[filename1].1.is_empty());
         assert_eq!(
             processed_files[filename1].1,
-            files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
@@ -1778,7 +1296,7 @@ mod tests {
         assert!(!processed_files[filename2].1.is_empty());
         assert_eq!(
             processed_files[filename2].1,
-            files_map["/another.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
@@ -1786,7 +1304,7 @@ mod tests {
         assert!(!processed_files[filename3].1.is_empty());
         assert_eq!(
             processed_files[filename3].1,
-            files_map["/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
@@ -1794,8 +1312,9 @@ mod tests {
         assert!(!processed_files[filename4].1.is_empty());
         assert_eq!(
             processed_files[filename4].1,
-            files_map["/noextension"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/noextension"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1814,29 +1333,30 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            files_map["/testdata/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/testdata/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            files_map["/testdata/another.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/testdata/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            files_map["/testdata/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/testdata/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            files_map["/testdata/noextension"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/testdata/noextension"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1855,29 +1375,30 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            files_map["/another.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            files_map["/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            files_map["/noextension"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/noextension"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1896,29 +1417,30 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            files_map["/myroot/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            files_map["/myroot/another.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            files_map["/myroot/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            files_map["/myroot/noextension"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/noextension"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1937,29 +1459,30 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            files_map["/myroot/testdata/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/testdata/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            files_map["/myroot/testdata/another.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/testdata/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            files_map["/myroot/testdata/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/testdata/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            files_map["/myroot/testdata/noextension"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/myroot/testdata/noextension"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -1972,6 +1495,8 @@ mod tests {
 
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
+
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
@@ -1996,43 +1521,44 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            new_files_map["/another.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            new_files_map["/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            new_files_map["/noextension"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/noextension"][PREDICATE_LINK]
         );
 
         let filename5 = "../testdata/subfolder/subexists.md";
         assert_eq!(new_processed_files[filename5].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename5].1,
-            new_files_map["/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subexists.md"][PREDICATE_LINK]
         );
 
         let filename6 = "../testdata/subfolder/sub2.md";
         assert_eq!(new_processed_files[filename6].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename6].1,
-            new_files_map["/sub2.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/sub2.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -2045,6 +1571,8 @@ mod tests {
 
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
+
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
@@ -2069,28 +1597,28 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            new_files_map["/another.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            new_files_map["/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            new_files_map["/noextension"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/noextension"][PREDICATE_LINK]
         );
 
         let filename5 = "../testdata/subfolder/subexists.md";
@@ -2098,7 +1626,7 @@ mod tests {
         assert!(!new_processed_files[filename5].1.is_empty());
         assert_eq!(
             new_processed_files[filename5].1,
-            new_files_map["/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subexists.md"][PREDICATE_LINK]
         );
 
         let filename6 = "../testdata/subfolder/sub2.md";
@@ -2106,8 +1634,9 @@ mod tests {
         assert!(!new_processed_files[filename6].1.is_empty());
         assert_eq!(
             new_processed_files[filename6].1,
-            new_files_map["/sub2.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/sub2.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -2120,6 +1649,8 @@ mod tests {
 
         assert_eq!(processed_files.len(), 1);
         assert_eq!(files_map.len(), 1);
+
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
@@ -2141,24 +1672,25 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/test.md"][PREDICATE_LINK]
         );
         let filename2 = "../testdata/.subhidden/test.md";
         assert_eq!(new_processed_files[filename2].0, CONTENT_UPDATED_SIGN);
         assert_eq!(
             new_processed_files[filename2].1,
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
 
         // check sizes are the same but links are different
         assert_eq!(
-            files_map["/test.md"][FAKE_RDF_PREDICATE_SIZE],
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_SIZE]
+            files_map["/test.md"][PREDICATE_SIZE],
+            new_files_map["/test.md"][PREDICATE_SIZE]
         );
         assert_ne!(
-            files_map["/test.md"][FAKE_RDF_PREDICATE_LINK],
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            files_map["/test.md"][PREDICATE_LINK],
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -2168,6 +1700,8 @@ mod tests {
         let (xorurl, _, _) = safe
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
+
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let versioned_xorurl = format!("{}?v=5", xorurl);
         match safe
@@ -2183,16 +1717,20 @@ mod tests {
             .await
         {
             Ok(_) => Err(anyhow!("Sync was unexpectedly successful".to_string(),)),
-            Err(err) => {
+            Err(Error::InvalidInput(msg)) => {
                 assert_eq!(
-                    err,
-                    Error::InvalidInput(format!(
-                        "The target URL cannot cannot contain a version: {}",
+                    msg,
+                    format!(
+                        "The target URL cannot contain a version: {}",
                         versioned_xorurl
-                    ))
+                    )
                 );
                 Ok(())
             }
+            other => Err(anyhow!(
+                "Error returned is not the expected one: {:?}",
+                other
+            )),
         }
     }
 
@@ -2205,6 +1743,8 @@ mod tests {
 
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
+
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
@@ -2230,28 +1770,28 @@ mod tests {
         assert_eq!(new_processed_files[file_path1].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[file_path1].1,
-            files_map[file_path1][FAKE_RDF_PREDICATE_LINK]
+            files_map[file_path1][PREDICATE_LINK]
         );
 
         let file_path2 = "/another.md";
         assert_eq!(new_processed_files[file_path2].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[file_path2].1,
-            files_map[file_path2][FAKE_RDF_PREDICATE_LINK]
+            files_map[file_path2][PREDICATE_LINK]
         );
 
         let file_path3 = "/subfolder/subexists.md";
         assert_eq!(new_processed_files[file_path3].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[file_path3].1,
-            files_map[file_path3][FAKE_RDF_PREDICATE_LINK]
+            files_map[file_path3][PREDICATE_LINK]
         );
 
         let file_path4 = "/noextension";
         assert_eq!(new_processed_files[file_path4].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[file_path4].1,
-            files_map[file_path4][FAKE_RDF_PREDICATE_LINK]
+            files_map[file_path4][PREDICATE_LINK]
         );
 
         // and finally check the synced file was added
@@ -2259,8 +1799,9 @@ mod tests {
         assert_eq!(new_processed_files[filename5].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename5].1,
-            new_files_map["/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subexists.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -2280,15 +1821,17 @@ mod tests {
             .await
         {
             Ok(_) => Err(anyhow!("Sync was unexpectedly successful".to_string(),)),
-            Err(err) => {
+            Err(Error::InvalidInput(msg)) => {
                 assert_eq!(
-                    err,
-                    Error::InvalidInput(
-                        "'delete' is not allowed if 'recursive' is not set".to_string()
-                    )
+                    msg,
+                    "'delete' is not allowed if 'recursive' is not set".to_string()
                 );
                 Ok(())
             }
+            other => Err(anyhow!(
+                "Error returned is not the expected one: {:?}",
+                other
+            )),
         }
     }
 
@@ -2300,9 +1843,9 @@ mod tests {
             .await?;
 
         let nrsurl = random_nrs_name();
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_content_version(None);
-        let unversioned_link = xorurl_encoder.to_string();
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_content_version(None);
+        let unversioned_link = safe_url.to_string();
         match safe
             .nrs_map_container_create(&nrsurl, &unversioned_link, false, true, false)
             .await
@@ -2310,16 +1853,20 @@ mod tests {
             Ok(_) => Err(anyhow!(
                 "NRS create was unexpectedly successful".to_string(),
             )),
-            Err(err) => {
+            Err(Error::InvalidInput(msg)) => {
                 assert_eq!(
-                err,
-                Error::InvalidInput(format!(
+                msg,
+                format!(
                     "The linked content (FilesContainer) is versionable, therefore NRS requires the link to specify a version: \"{}\"",
                     unversioned_link
-                ))
+                )
             );
                 Ok(())
             }
+            other => Err(anyhow!(
+                "Error returned is not the expected one: {:?}",
+                other
+            )),
         }
     }
 
@@ -2329,6 +1876,8 @@ mod tests {
         let (xorurl, _, _) = safe
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
+
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         match safe
             .files_container_sync(
@@ -2343,16 +1892,18 @@ mod tests {
             .await
         {
             Ok(_) => Err(anyhow!("Sync was unexpectedly successful".to_string(),)),
-            Err(err) => {
+            Err(Error::InvalidInput(msg)) => {
                 assert_eq!(
-                    err,
-                    Error::InvalidInput(
-                        "'update-nrs' is not allowed since the URL provided is not an NRS URL"
-                            .to_string()
-                    )
+                    msg,
+                    "'update-nrs' is not allowed since the URL provided is not an NRS URL"
+                        .to_string()
                 );
                 Ok(())
             }
+            other => Err(anyhow!(
+                "Error returned is not the expected one: {:?}",
+                other
+            )),
         }
     }
 
@@ -2363,13 +1914,16 @@ mod tests {
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
 
-        let nrsurl = random_nrs_name();
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_content_version(Some(0));
-        let _ = safe
-            .nrs_map_container_create(&nrsurl, &xorurl_encoder.to_string(), false, true, false)
+        let nrsurl = random_nrs_name();
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_content_version(Some(0));
+        let (nrs_xorurl, _, _) = safe
+            .nrs_map_container_create(&nrsurl, &safe_url.to_string(), false, true, false)
             .await?;
+
+        let _ = retry_loop!(safe.fetch(&nrs_xorurl, None));
 
         let _ = safe
             .files_container_sync(
@@ -2383,10 +1937,11 @@ mod tests {
             )
             .await?;
 
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_content_version(Some(1));
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_content_version(Some(1));
         let (new_link, _) = safe.parse_and_resolve_url(&nrsurl).await?;
-        assert_eq!(new_link.to_string(), xorurl_encoder.to_string());
+        assert_eq!(new_link.to_string(), safe_url.to_string());
+
         Ok(())
     }
 
@@ -2396,15 +1951,16 @@ mod tests {
         let (xorurl, processed_files, files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_path("path/when/sync");
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_path("path/when/sync");
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
                 "../testdata/subfolder",
-                &xorurl_encoder.to_string(),
+                &safe_url.to_string(),
                 true,
                 false,
                 false,
@@ -2427,28 +1983,28 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            new_files_map["/another.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            new_files_map["/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            new_files_map["/noextension"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/noextension"][PREDICATE_LINK]
         );
 
         // and finally check the synced file is there
@@ -2456,8 +2012,9 @@ mod tests {
         assert_eq!(new_processed_files[filename5].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename5].1,
-            new_files_map["/path/when/sync/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/path/when/sync/subexists.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -2467,15 +2024,16 @@ mod tests {
         let (xorurl, processed_files, files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_path("/path/when/sync/");
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_path("/path/when/sync/");
         let (version, new_processed_files, new_files_map) = safe
             .files_container_sync(
                 "../testdata/subfolder",
-                &xorurl_encoder.to_string(),
+                &safe_url.to_string(),
                 true,
                 false,
                 false,
@@ -2498,28 +2056,28 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            new_files_map["/test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/test.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/another.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            new_files_map["/another.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/another.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/subfolder/subexists.md";
         assert_eq!(processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename3].1,
-            new_files_map["/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subfolder/subexists.md"][PREDICATE_LINK]
         );
 
         let filename4 = "../testdata/noextension";
         assert_eq!(processed_files[filename4].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename4].1,
-            new_files_map["/noextension"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/noextension"][PREDICATE_LINK]
         );
 
         // and finally check the synced file is there
@@ -2527,19 +2085,20 @@ mod tests {
         assert_eq!(new_processed_files[filename5].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename5].1,
-            new_files_map["/path/when/sync/subfolder/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/path/when/sync/subfolder/subexists.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_files_container_get() -> Result<()> {
         let mut safe = new_safe_instance().await?;
-        let (xorurl, _processed_files, files_map) = safe
+        let (xorurl, _, files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
 
-        let (version, fetched_files_map) = safe.files_container_get(&xorurl).await?;
+        let (version, fetched_files_map) = retry_loop!(safe.files_container_get(&xorurl));
 
         assert_eq!(version, 0);
         assert_eq!(fetched_files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
@@ -2551,6 +2110,7 @@ mod tests {
             fetched_files_map["/subfolder/subexists.md"]
         );
         assert_eq!(files_map["/noextension"], fetched_files_map["/noextension"]);
+
         Ok(())
     }
 
@@ -2561,7 +2121,7 @@ mod tests {
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
 
-        let (version, _) = safe.files_container_get(&xorurl).await?;
+        let (version, _) = retry_loop!(safe.files_container_get(&xorurl));
         assert_eq!(version, 0);
 
         let (version, _, _) = safe
@@ -2577,12 +2137,12 @@ mod tests {
             .await?;
         assert_eq!(version, 1);
 
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_content_version(None);
-        let (version, _) = safe
-            .files_container_get(&xorurl_encoder.to_string())
-            .await?;
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_content_version(None);
+        let (version, _) = retry_loop_for_pattern!(safe
+            .files_container_get(&safe_url.to_string()), Ok((version, _)) if *version == 1)?;
         assert_eq!(version, 1);
+
         Ok(())
     }
 
@@ -2592,6 +2152,7 @@ mod tests {
         let (xorurl, _processed_files, files_map) = safe
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         // let's create a new version of the files container
         let (_version, _new_processed_files, new_files_map) = safe
@@ -2607,26 +2168,23 @@ mod tests {
             .await?;
 
         // let's fetch version 0
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_content_version(Some(0));
-        let (version, v0_files_map) = safe
-            .files_container_get(&xorurl_encoder.to_string())
-            .await?;
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_content_version(Some(0));
+        let (version, v0_files_map) = safe.files_container_get(&safe_url.to_string()).await?;
 
         assert_eq!(version, 0);
         assert_eq!(files_map, v0_files_map);
         // let's check that one of the files in v1 is still there
         let file_path1 = "/test.md";
         assert_eq!(
-            files_map[file_path1][FAKE_RDF_PREDICATE_LINK],
-            v0_files_map[file_path1][FAKE_RDF_PREDICATE_LINK]
+            files_map[file_path1][PREDICATE_LINK],
+            v0_files_map[file_path1][PREDICATE_LINK]
         );
 
         // let's fetch version 1
-        xorurl_encoder.set_content_version(Some(1));
-        let (version, v1_files_map) = safe
-            .files_container_get(&xorurl_encoder.to_string())
-            .await?;
+        safe_url.set_content_version(Some(1));
+        let (version, v1_files_map) = retry_loop_for_pattern!(safe
+                .files_container_get(&safe_url.to_string()), Ok((version, _)) if *version == 1)?;
 
         assert_eq!(version, 1);
         assert_eq!(new_files_map, v1_files_map);
@@ -2640,17 +2198,17 @@ mod tests {
         assert!(v1_files_map.get(file_path4).is_none());
 
         // let's fetch version 2 (invalid)
-        xorurl_encoder.set_content_version(Some(2));
-        match safe.files_container_get(&xorurl_encoder.to_string()).await {
+        safe_url.set_content_version(Some(2));
+        match safe.files_container_get(&safe_url.to_string()).await {
             Ok(_) => Err(anyhow!(
-                "Unexpectedly retrieved verion 3 of container".to_string(),
+                "Unexpectedly retrieved verion 2 of container".to_string(),
             )),
             Err(Error::VersionNotFound(msg)) => {
                 assert_eq!(
                     msg,
                     format!(
                         "Version '2' is invalid for FilesContainer found at \"{}\"",
-                        xorurl_encoder
+                        safe_url
                     )
                 );
                 Ok(())
@@ -2669,7 +2227,7 @@ mod tests {
             .files_container_create(Some("../testdata/"), None, true, true, false)
             .await?;
 
-        let (_version, files_map_get) = safe.files_container_get(&xorurl.to_string()).await?;
+        let (_, files_map_get) = retry_loop!(safe.files_container_get(&xorurl.to_string()));
 
         assert_eq!(files_map, files_map_get);
         assert_eq!(files_map_get["/emptyfolder"], files_map["/emptyfolder"]);
@@ -2687,14 +2245,15 @@ mod tests {
         let (xorurl, _, _) = safe
             .files_container_create(Some("../testdata/test.md"), None, false, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let nrsurl = random_nrs_name();
-
-        let mut xorurl_encoder = XorUrlEncoder::from_url(&xorurl)?;
-        xorurl_encoder.set_content_version(Some(0));
-        let _ = safe
-            .nrs_map_container_create(&nrsurl, &xorurl_encoder.to_string(), false, true, false)
+        let mut safe_url = SafeUrl::from_url(&xorurl)?;
+        safe_url.set_content_version(Some(0));
+        let (nrs_xorurl, _, _) = safe
+            .nrs_map_container_create(&nrsurl, &safe_url.to_string(), false, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&nrs_xorurl, None));
 
         let _ = safe
             .files_container_sync(
@@ -2730,9 +2289,10 @@ mod tests {
         // └── test.md
         //
         // So, we have 6 items.
-        let (version, fetched_files_map) = safe.files_container_get(&xorurl).await?;
+        let (version, fetched_files_map) = retry_loop_for_pattern!(safe.files_container_get(&xorurl), Ok((version, _)) if *version == 2)?;
         assert_eq!(version, 2);
         assert_eq!(fetched_files_map.len(), 6);
+
         Ok(())
     }
 
@@ -2744,6 +2304,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (version, new_processed_files, new_files_map) = safe
             .files_container_add(
@@ -2764,21 +2325,21 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            new_files_map["/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subexists.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/subfolder/sub2.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            new_files_map["/sub2.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/sub2.md"][PREDICATE_LINK]
         );
 
         let filename3 = "../testdata/test.md";
         assert_eq!(new_processed_files[filename3].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename3].1,
-            new_files_map["/new_filename_test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/new_filename_test.md"][PREDICATE_LINK]
         );
         Ok(())
     }
@@ -2791,6 +2352,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (version, new_processed_files, new_files_map) = safe
             .files_container_add(
@@ -2828,12 +2390,13 @@ mod tests {
         assert_eq!(new_processed_files2[filename].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[filename].1,
-            new_files_map["/new_filename_test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/new_filename_test.md"][PREDICATE_LINK]
         );
         assert_eq!(
             new_processed_files2[filename].1,
-            new_files_map2["/new_filename_test.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map2["/new_filename_test.md"][PREDICATE_LINK]
         );
+
         Ok(())
     }
 
@@ -2845,6 +2408,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT); // root "/" + 2 files
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         match safe
             .files_container_add("../testdata", &xorurl, false, false, false, false)
@@ -2875,6 +2439,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         // let's try to add a file with same target name and same content, it should fail
         let (version, new_processed_files, new_files_map) = safe
@@ -2941,6 +2506,7 @@ mod tests {
             new_processed_files["../testdata/test.md"].1,
             new_files_map["/sub2.md"]["link"]
         );
+
         Ok(())
     }
 
@@ -2952,6 +2518,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), 1);
         assert_eq!(files_map.len(), 1);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         match safe
             .files_container_sync(
@@ -3011,6 +2578,8 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
+
         let data = b"0123456789";
         let file_xorurl = safe.files_store_public_blob(data, None, false).await?;
         let new_filename = "/new_filename_test.md";
@@ -3034,25 +2603,22 @@ mod tests {
         assert_eq!(processed_files[filename1].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename1].1,
-            new_files_map["/subexists.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/subexists.md"][PREDICATE_LINK]
         );
 
         let filename2 = "../testdata/subfolder/sub2.md";
         assert_eq!(processed_files[filename2].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             processed_files[filename2].1,
-            new_files_map["/sub2.md"][FAKE_RDF_PREDICATE_LINK]
+            new_files_map["/sub2.md"][PREDICATE_LINK]
         );
 
         assert_eq!(new_processed_files[new_filename].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[new_filename].1,
-            new_files_map[new_filename][FAKE_RDF_PREDICATE_LINK]
+            new_files_map[new_filename][PREDICATE_LINK]
         );
-        assert_eq!(
-            new_files_map[new_filename][FAKE_RDF_PREDICATE_LINK],
-            file_xorurl
-        );
+        assert_eq!(new_files_map[new_filename][PREDICATE_LINK], file_xorurl);
 
         // let's add another file but with the same name
         let data = b"9876543210";
@@ -3074,12 +2640,13 @@ mod tests {
         assert_eq!(new_processed_files[new_filename].0, CONTENT_UPDATED_SIGN);
         assert_eq!(
             new_processed_files[new_filename].1,
-            new_files_map[new_filename][FAKE_RDF_PREDICATE_LINK]
+            new_files_map[new_filename][PREDICATE_LINK]
         );
         assert_eq!(
-            new_files_map[new_filename][FAKE_RDF_PREDICATE_LINK],
+            new_files_map[new_filename][PREDICATE_LINK],
             other_file_xorurl
         );
+
         Ok(())
     }
 
@@ -3091,6 +2658,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), SUBFOLDER_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let data = b"0123456789";
         let new_filename = "/new_filename_test.md";
@@ -3112,7 +2680,7 @@ mod tests {
         assert_eq!(new_processed_files[new_filename].0, CONTENT_ADDED_SIGN);
         assert_eq!(
             new_processed_files[new_filename].1,
-            new_files_map[new_filename][FAKE_RDF_PREDICATE_LINK]
+            new_files_map[new_filename][PREDICATE_LINK]
         );
 
         // let's add another file but with the same name
@@ -3133,7 +2701,7 @@ mod tests {
         assert_eq!(new_processed_files[new_filename].0, CONTENT_UPDATED_SIGN);
         assert_eq!(
             new_processed_files[new_filename].1,
-            new_files_map[new_filename][FAKE_RDF_PREDICATE_LINK]
+            new_files_map[new_filename][PREDICATE_LINK]
         );
         Ok(())
     }
@@ -3146,6 +2714,7 @@ mod tests {
             .await?;
         assert_eq!(processed_files.len(), TESTDATA_PUT_FILEITEM_COUNT);
         assert_eq!(files_map.len(), TESTDATA_PUT_FILEITEM_COUNT);
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         // let's remove a file first
         let (version, new_processed_files, new_files_map) = safe
@@ -3160,7 +2729,7 @@ mod tests {
         assert_eq!(new_processed_files[filepath].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[filepath].1,
-            files_map[filepath][FAKE_RDF_PREDICATE_LINK]
+            files_map[filepath][PREDICATE_LINK]
         );
 
         // let's remove an entire folder now with recursive flag
@@ -3179,15 +2748,16 @@ mod tests {
         assert_eq!(new_processed_files[filename1].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[filename1].1,
-            files_map[filename1][FAKE_RDF_PREDICATE_LINK]
+            files_map[filename1][PREDICATE_LINK]
         );
 
         let filename2 = "/subfolder/sub2.md";
         assert_eq!(new_processed_files[filename2].0, CONTENT_DELETED_SIGN);
         assert_eq!(
             new_processed_files[filename2].1,
-            files_map[filename2][FAKE_RDF_PREDICATE_LINK]
+            files_map[filename2][PREDICATE_LINK]
         );
+
         Ok(())
     }
 }

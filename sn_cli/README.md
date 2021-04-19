@@ -20,6 +20,7 @@
         - [Run a local network for testing: `--test`](#run-a-local-network-for-testing---test)
       - [Connect to a shared network](#connect-to-a-shared-network)
       - [Switch networks](#switch-networks)
+      - [Set network bootstrap address](#set-network-bootstrap-address)
       - [Node update](#node-update)
     - [Auth](#auth)
       - [The Authenticator daemon (authd)](#the-authenticator-daemon-authd)
@@ -39,7 +40,6 @@
       - [SafeKeys Creation](#safekeys-creation)
       - [SafeKey's Balance](#safekeys-balance)
       - [SafeKeys Transfer](#safekeys-transfer)
-    - [Key-pair](#key-pair)
     - [Wallet](#wallet)
       - [Wallet Creation](#wallet-creation)
       - [Wallet Balance](#wallet-balance)
@@ -91,17 +91,17 @@
 
 This crate implements a CLI (Command Line Interface) for the Safe Network.
 
-The Safe CLI provides all the tools necessary to interact with the Safe Network, including storing and browsing data of any kind, following links that are contained in the data and using their addresses on the network, using safecoin wallets, and much more. Using the CLI users have access to any type of operation that can be made on the Safe Network and the data stored on it, allowing them to also use it for automated scripts and piped chain of commands.
+The Safe CLI provides all the tools necessary to interact with the Safe Network, including storing and browsing data of any kind, following links that are contained in the data and using their addresses on the network, using safecoin wallets, and much more. Using the CLI, users have access to any type of operation that can be made on the Safe Network and the data stored on it, allowing them to also use it for automated scripts and piped chain of commands.
 
 ## Download
 
 The latest version of the Safe CLI can be downloaded and installed using the [install script](https://sn-api.s3.amazonaws.com/install.sh).
 
-The [install script](https://sn-api.s3.amazonaws.com/install.sh) will not only download latest Safe CLI, but it will also unpack CLI binary onto `~/.safe/cli/` folder (`C:\Users\<user>\.safe\cli` in Windows), as well as set it in the PATH, so you can run the `safe` binary from any location when opening a console.
+The [install script](https://sn-api.s3.amazonaws.com/install.sh) will not only download the latest Safe CLI, but it will also unpack the CLI binary into the `~/.safe/cli/` folder (`C:\Users\<user>\.safe\cli` in Windows), as well as set it in the PATH, so you can run the `safe` binary from any location when opening a console.
 
 ### Linux and Mac
 
-Open a new console and run any of the following `curl` or `wget` commands:
+Open a new console and run either of the following `curl` or `wget` commands:
 ```
 $ curl -so- https://sn-api.s3.amazonaws.com/install.sh | bash
 ```
@@ -112,20 +112,25 @@ $ wget -qO- https://sn-api.s3.amazonaws.com/install.sh | bash
 
 ### Windows
 
-If you are a Windows user, you'll need to open a [Git BASH](https://gitforwindows.org) console with admin permissions.
+If you are a Windows user, you will need to download and install the [Visual C++ Redistributable for Visual Studio](https://www.microsoft.com/en-in/download/details.aspx?id=48145) if not already installed on your machine, otherwise attempting to run the CLI will result in errors such as:
+`error while loading shared libraries: api-ms-win-crt-locale-l1-1-0.dll: cannot open shared object file: No such file or directory`
 
-Click the "Start" button and type "git-bash" in the search bar, then press the **Shift+Ctrl+Enter** keys to reach Git-Bash console. The Git-Bash icon may also be in the Start Menu. You can [download Git Bash from here](https://gitforwindows.org/) if you don't have in your PC.
+You may already have these Visual C++ libraries on your machine if you already use Visual Studio.
 
-Once you have a Git Bash console just run the above `curl` command:
+Next, you'll need to open a [Git BASH](https://gitforwindows.org) console with admin permissions.
+
+Click the "Start" button and type "git-bash" in the search bar, then press the **Shift+Ctrl+Enter** keys to reach Git-Bash console. The Git-Bash icon may also be in the Start Menu. You can [download Git Bash from here](https://gitforwindows.org/) if you don't already have installed on your PC.
+
+Once you have an admin Git Bash console running, just run the above `curl` command to download and execute our install script:
 ```
 $ curl -so- https://sn-api.s3.amazonaws.com/install.sh | bash
 ```
 
-Once Safe CLI is downloaded and installed in your system, you can follow the steps in this User Guide by starting from the [Using the CLI](#using-the-cli) section below in this document.
+Once the Safe CLI is downloaded and installed on your system, you can follow the steps in this User Guide by starting from the [Using the CLI](#using-the-cli) section below in this document.
 
-You can alternatively download the latest version of the Safe CLI from the [releases page](https://github.com/maidsafe/sn_api/releases/latest) and install it manually on your system.
+Alternatively, you can download the latest version of the Safe CLI from the [releases page](https://github.com/maidsafe/sn_api/releases/latest) and install it manually on your system.
 
-If otherwise you prefer to build the Safe CLI from source code, please follow the instructions in the next two sections below.
+If you prefer to build the Safe CLI from source code, please follow the instructions in the [Build](#build) section below.
 
 ## Build
 
@@ -138,13 +143,13 @@ $ cd sn_api
 $ cargo build
 ```
 
-Since this project has a cargo workspace with the `sn_cli` as the default crate, when building from the root location it will build the Safe CLI. Once it's built, you can find the `safe` executable at `target/debug/` or `target/release` if you built it with the `--release` flag.
+Since this project has a cargo workspace with the `sn_cli` as the default crate, when building from the root location it will build the Safe CLI. Once it's built, you can find the `safe` executable at `target/debug/`, or `target/release` if you built it with the `--release` flag.
 
 ## Using the CLI
 
 Right now the CLI is under active development. Here we're listing commands ready to be tested.
 
-In this guide we will assume from now on that you have navigated your terminal to the directory where the `safe` executable file you downloaded or built for your platform is located.
+In this guide we will assume from now on that you have used the install script and so have the CLI binary added to your system PATH, or you have navigated your terminal to the directory where the `safe` executable file you downloaded or built for your platform is located.
 
 The base command, once built, is `$ safe`, or all commands can be run via `$ cargo run -- <command>`.
 
@@ -190,12 +195,17 @@ Done!
 At the current state of the Safe project, a single-section Safe network can be launched locally in our system. If the Safe Network node was installed in the system using the CLI as described in the previous section we can then launch it with a simple command:
 ```shell
 $ safe node run-baby-fleming
+Creating '~/.safe/node/baby-fleming-nodes' folder
 Storing nodes' generated data at ~/.safe/node/baby-fleming-nodes
 Launching local Safe network...
 Launching with node executable from: ~/.safe/node/sn_node
-Network size: 8 nodes
+Version: sn_node 0.26.8
+Network size: 11 nodes
 Launching genesis node (#1)...
-Genesis node contact info: ["127.0.0.1:55851"]
+Connection info directory: ~/.safe/node/node_connection_info.config
+Genesis node contact info: ["127.0.0.1:12000"]
+Common node args for launching the network: ["-vv", "--idle-timeout-msec", "5500", "--keep-alive-interval-msec", "4000", "--local"]
+No RUST_LOG override provided
 Launching node #2...
 Launching node #3...
 Launching node #4...
@@ -203,10 +213,13 @@ Launching node #5...
 Launching node #6...
 Launching node #7...
 Launching node #8...
+Launching node #9...
+Launching node #10...
+Launching node #11...
 Done!
 ```
 
-Once the local network is running, the connection configuration file will be already in the correct place for your applications (including the CLI) to connect to it. Thus from this point on, you can simply use the CLI or any application to connect to your local network. Note that depending on the application, you may need to restart it so it uses the new connection information for your local network.
+Once the local network is running, the connection configuration file will be already in the correct place for the CLI to connect to it. Thus from this point on, you can simply use the CLI to connect to your local network.
 
 In order to shutdown a running local network, the following CLI command can be invoked to kill all running sn_node processes:
 ```shell
@@ -216,7 +229,7 @@ Success, all processes instances of sn_node were stopped!
 
 ##### Run a local network for testing: `--test`
 
-The `run-baby-fleming` command accepts a `--test` or `-t` flag to automatically create a new Safe and authorise the CLI for test purposes. This requires that the `node`, `authd` and `cli` themselves be installed in the correct locations on the system
+The `run-baby-fleming` command accepts a `--test` or `-t` flag to automatically create a new Safe and authorise the CLI for test purposes. This requires that the `sn_node`, `sn_authd` and CLI themselves be installed in the correct locations on the system
 
 #### Connect to a shared network
 
@@ -224,41 +237,44 @@ Ready to play your part in a shared network by adding your node from home to a s
 
 MaidSafe are currently hosting some bootstrap nodes on Digital Ocean to kickstart a single section, you can bootstrap using these nodes as hardcoded contacts, then watch the logs as your node joins the network, progresses to Adult status, and plays its part in hosting Immutable Data Chunks. Of course you will also be able to create a Safe on this network, unlock it, upload data, create keys and wallets, and all the other commands described in this user guide. This guide will take you through connecting to this MaidSafe started network, but of course it can be applied to connecting to any shared section, hosted by anyone.
 
-You will need the network configuration containing the details of the hardcoded contacts that will bootstrap you to the shared section. If you have connected to this or previous iterations of the MaidSafe shared section then you may already have a `shared-section` network profile saved on your machine. You can confirm this and update it to the latest configuration using `safe networks check`:
+You will need the network configuration containing the details of the hardcoded contacts that will bootstrap you to the shared section. If you have connected to this or previous iterations of the MaidSafe shared section then you may already have a `maidsafe-testnet` network profile saved on your machine. You can confirm this and update it to the latest configuration using `safe networks check`:
 ```shell
 $ safe networks check
 Checking current setup network connection information...
 Fetching 'my-network' network connection information from '~/.config/sn_cli/networks/my-network_node_connection_info.config' ...
-Fetching 'shared-section' network connection information from 'https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config' ...
+Fetching 'maidsafe-testnet' network connection information from 'https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config' ...
 
-'shared-section' network matched. Current set network connection information at '~/.config/sn_node/node_connection_info.config' matches 'shared-section' network as per current config
+'maidsafe-testnet' network matched!
+Current set network connection information at '~/.config/sn_node/node_connection_info.config' matches 'maidsafe-testnet' network as per current config
 ```
 
-If you don't have a configuration in your results which points to the exact [S3 location](https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config) listed in the results above, you can add using `safe networks add`:
+If you don't have a configuration in your results which points to the exact [S3 location](https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config) listed in the results above, you can add using `safe networks add`:
 ```shell
-$ safe networks add shared-section https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config
-Network 'shared-section' was added to the list
+$ safe networks add maidsafe-testnet https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config
+Network 'maidsafe-testnet' was added to the list. Connection information is located at 'https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config'
 ```
 
-Now you need to ensure you are set to use this `shared-section` configuration that we have updated/added, we can use `safe networks switch shared-section` for this:
+Now you need to ensure you are set to use this `maidsafe-testnet` configuration that we have updated/added, we can use `safe networks switch maidsafe-testnet` for this:
 ```shell
-$ safe networks switch shared-section
-Switching to 'shared-section' network...
-Fetching 'shared-section' network connection information from 'https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config' ...
-Successfully switched to 'shared-section' network in your system!
-If you need write access to the 'shared-section' network, you'll need to restart authd, unlock a Safe and re-authorise the CLI again
+$ safe networks switch maidsafe-testnet
+Switching to 'maidsafe-testnet' network...
+Fetching 'maidsafe-testnet' network connection information from 'https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config' ...
+Successfully switched to 'maidsafe-testnet' network in your system!
+If you need write access to the 'maidsafe-testnet' network, you'll need to restart authd (safe auth restart), unlock a Safe and re-authorise the CLI again
 ```
 
 We're now ready to launch our node and add it as a node. This is achieved using `safe node join` as follows:
 ```shell
 $ safe node join
-Creating '/Users/maidsafe/.safe/node/local-node' folder
-Storing nodes' generated data at /Users/maidsafe/.safe/node/local-node
+Joining network with contacts {161.35.36.185:12000}...
+Creating '~/.safe/node/local-node' folder
+Storing nodes' generated data at ~/.safe/node/local-node
 Starting a node to join a Safe network...
-Launching with node executable from: /Users/maidsafe/.safe/node/sn_node
-Node started with hardcoded contact: 161.35.36.185:12000
+Launching with node executable from: ~/.safe/node/sn_node
+Version: sn_node 0.26.8
+Node to be started with contact(s): ["161.35.36.185:12000"]
 Launching node...
-Node logs are being stored at: /Users/maidsafe/.safe/node/local-node/sn_node.log
+Node logs are being stored at: ~/.safe/node/local-node/sn_node.log
 ```
 
 Your node will now launch and attempt to connect to the shared network. You can keep an eye on its progress via its logs, which can be found at `~/.safe/node/local-node/sn_node.log`.
@@ -267,7 +283,7 @@ Note that at the time of writing nodes from home is being restricted to those wi
 
 #### Switch networks
 
-MaidSafe currently hosts a single-section network for those who don't want to run a local network but still have a go at using the CLI and client applications. It's very common for users testing and experimenting with CLI and Safe applications to have a local network running, but switching to use the MaidSafe hosted network, back and forth, is also quite common.
+MaidSafe currently hosts a test network for those who don't want to run a local network but still have a go at using the CLI and client applications. It's very common for users testing and experimenting with CLI and Safe applications to have a local network running, but switching to use the MaidSafe hosted network, back and forth, is also quite common.
 
 The CLI allows you to set up a list of networks in its config settings for easily switching to connect to them. If you just launched a local network, you can keep current connection information as a configured network on CLI with the following command:
 ```shell
@@ -278,44 +294,77 @@ Network 'my-network' was added to the list. Connection information is located at
 
 If you also would like to connect to the MaidSafe hosted test network, you would need to set it up in CLI settings as another network, specifying the URL where to fetch latest connection information from:
 ```shell
-$ safe networks add shared-section https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config
-Network 'shared-section' was added to the list
+$ safe networks add maidsafe-testnet https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config
+Network 'maidsafe-testnet' was added to the list
 ```
 
 We can also retrieve the list of the different networks that were set up in the CLI config:
 ```shell
 $ safe networks
-+----------------+--------------------------------------------------------------------------------------------------+
-| Networks       |                                                                                                  |
-+----------------+--------------------------------------------------------------------------------------------------+
-| Network name   | Connection info location                                                                         |
-+----------------+--------------------------------------------------------------------------------------------------+
-| my-network     | ~/.config/sn_cli/networks/my-network_node_connection_info.config                              |
-+----------------+--------------------------------------------------------------------------------------------------+
-| shared-section | https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config |
-+----------------+--------------------------------------------------------------------------------------------------+
++----------+------------------+------------------------------------------------------------------------------------------------+
+| Networks |                  |                                                                                                |
++----------+------------------+------------------------------------------------------------------------------------------------+
+| Current  | Network name     | Connection info                                                                                |
++----------+------------------+------------------------------------------------------------------------------------------------+
+|          | maidsafe-testnet | https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config                  |
++----------+------------------+------------------------------------------------------------------------------------------------+
+| *        | my-network       | ~/.safe/cli/networks/my-network_node_connection_info.config                                    |
++----------+------------------+------------------------------------------------------------------------------------------------+
 ```
 
-Once we have them in the CLI settings, we can use the CLI to automatically fetch the connection information data using the configured location, and place it at the right location in the system for Safe applications to connect to the selected network. E.g. let's switch to the 'shared-section' network we previously configured:
+Once we have them in the CLI settings, we can use the CLI to automatically fetch the connection information data using the configured location, and place it at the right location in the system for Safe applications to connect to the selected network. E.g. let's switch to the 'maidsafe-testnet' network we previously configured:
 ```shell
-$ safe networks switch shared-section
-Switching to 'shared-section' network...
-Fetching 'shared-section' network connection information from 'https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config' ...
-Successfully switched to 'shared-section' network in your system!
-If you need write access to the 'shared-section' network, you'll need to restart authd, unlock a Safe and re-authorise the CLI again
+$ safe networks switch maidsafe-testnet
+Switching to 'maidsafe-testnet' network...
+Fetching 'maidsafe-testnet' network connection information from 'https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config' ...
+Successfully switched to 'maidsafe-testnet' network in your system!
+If you need write access to the 'maidsafe-testnet' network, you'll need to restart authd (safe auth restart), unlock a Safe and re-authorise the CLI again
 ```
 
-Remember that every time you launch a local network the connection configuration in your system is automatically overwritten with new connection information. Also, if the shared network was restarted by MaidSafe, the new connection information is published in the same URL and needs to be updated in your system to be able to successfully connect to it. Thus if you want to make sure your current setup network matches any of those set up in the CLI config, you can use the `check` subcommand:
+Remember that every time you launch a local network the connection configuration in your system is automatically overwritten with new connection information. Also, if the test network was restarted by MaidSafe, the new connection information is published in the same URL and needs to be updated in your system to be able to successfully connect to it. Thus if you want to make sure your current setup network matches any of those set up in the CLI config, you can use the `check` subcommand:
 ```shell
 $ safe networks check
 Checking current setup network connection information...
 Fetching 'my-network' network connection information from '~/.config/sn_cli/networks/my-network_node_connection_info.config' ...
-Fetching 'shared-section' network connection information from 'https://sn-node-config.s3.eu-west-2.amazonaws.com/shared-section/node_connection_info.config' ...
+Fetching 'maidsafe-testnet' network connection information from 'https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config' ...
 
-'shared-section' network matched. Current set network connection information at '~/.config/sn_node/node_connection_info.config' matches 'shared-section' network as per current config
+'maidsafe-testnet' network matched!
+Current set network connection information at '~/.config/sn_node/node_connection_info.config' matches 'maidsafe-testnet' network as per current config
 ```
 
-Note that in the scenario that your current network is set to be the MaidSafe shared network, and that is restarted by MaidSafe (which causes new connection information to be published at the same URL), you then only need to re-run the `networks switch` command with the corresponding network name to update your system with the new connection information.
+Note that in the scenario that your current network is set to be the MaidSafe test network, and that is restarted by MaidSafe (which causes new connection information to be published at the same URL), you then only need to re-run the `networks switch` command with the corresponding network name to update your system with the new connection information.
+
+#### Set network bootstrap address
+
+Another way to add a network to the CLI config settings is by directly mapping a network name to its bootstrapping address/es (IPs and ports). This can be achieved by using the `networks set` subcommand:
+```shell
+$ safe networks set community-network 161.35.36.112:15000
+Network 'community-network' was added to the list. Contacts: '{161.35.36.112:15000}'
+```
+
+And as we did before, we could then switch to use this network using its name:
+```shell
+$ safe networks switch community-network
+Switching to 'community-network' network...
+Successfully switched to 'community-network' network in your system!
+If you need write access to the 'community-network' network, you'll need to restart authd (safe auth restart), unlock a Safe and re-authorise the CLI again
+```
+
+If now check the list of networks we have in the CLI config settings we can see the 'community-network' is listed as the one currently set:
+```shell
+$ safe networks
++----------+-------------------+------------------------------------------------------------------------------------------------+
+| Networks |                   |                                                                                                |
++----------+-------------------+------------------------------------------------------------------------------------------------+
+| Current  | Network name      | Connection info                                                                                |
++----------+-------------------+------------------------------------------------------------------------------------------------+
+| *        | community-network | {161.35.36.112:15000}                                                                          |
++----------+-------------------+------------------------------------------------------------------------------------------------+
+|          | maidsafe-testnet  | https://sn-node.s3.eu-west-2.amazonaws.com/config/node_connection_info.config                  |
++----------+-------------------+------------------------------------------------------------------------------------------------+
+|          | my-network        | ~/.safe/cli/networks/my-network_node_connection_info.config                                    |
++----------+-------------------+------------------------------------------------------------------------------------------------+
+```
 
 #### Node update
 
@@ -631,19 +680,14 @@ It enables the possibility to also have a state in the session, e.g. allowing th
 
 Users can record `SafeKey`s in a `Wallet` (see further below for more details about `Wallet`s), having friendly names to refer to them, but they can also be created as throw away `SafeKey`s which are not linked from any `Wallet`, container, or any other type of data on the network.
 
-Note that even though the key pair is automatically generated by the CLI, `SafeKey`s don’t hold the secret key on the network but just the public key, and `SafeKey`s can optionally have a safecoin balance attached to it. Thus `SafeKey`s can also be used for safecoin transfers. In this sense, a `SafeKey` can be compared to a Bitcoin address, it has a coin balance associated to it, such balance can be only queried using the secret key, and in order to spend its balance the corresponding secret key needs to be provided in the `transfer` request as well. The secret key can be provided by the user, or retrieved from a `Wallet`, at the moment of creating the transfer (again, see the [`Wallet` section](#wallet) below for more details).
+Note that the key pair is automatically generated by the CLI, although `SafeKey`s don’t hold the secret key on the network but just represent the public key. `SafeKey`s can also be used for safecoin transfers. In this sense, a `SafeKey` can be compared to a Bitcoin address, it has a coin balance associated to it, such balance can be only queried using the secret key, and in order to spend its balance the corresponding secret key needs to be provided in the `transfer` request to the network. The secret key can be provided by the user, or retrieved from a `Wallet`, at the moment of creating the transfer (again, see the [`Wallet` section](#wallet) below for more details).
 
 #### SafeKeys Creation
 
-To generate a key pair and create a new `SafeKey` on the network, the secret key of another `SafeKey` is needed to pay for storage costs:
-```shell
-$ safe keys create --pay-with <secret key>
-```
-
-But we can also create a `SafeKey` with test-coins to begin with (this is temporary and only for testing until farming is available):
+To generate a `SafeKey` with test-coins (this is available temporarily and only for testing):
 ```shell
 $ safe keys create --test-coins --preload 15.342
-New SafeKey created at: "safe://bbkulcbnrmdzhdkrfb6zbbf7fisbdn7ggztdvgcxueyq2iys272koaplks"
+New SafeKey created: "safe://bbkulcbnrmdzhdkrfb6zbbf7fisbdn7ggztdvgcxueyq2iys272koaplks"
 Preloaded with 15.342 testcoins
 Key pair generated:
 Public Key = b62c1e4e3544a1f64212fca89046df98d998ea615e84c4348c4b5fd29c07ad52a970539df819e31990c1edf09b882e61
@@ -653,7 +697,7 @@ Secret Key = c4cc596d7321a3054d397beff82fe64f49c3896a07a349d31f29574ac9f56965
 Once we have some `SafeKey`s with some test-coins we can use them to pay for the creation of a Safe (using the [Safe Authenticator](https://github.com/maidsafe/safe-authenticator-cli)), or to pay for the creation of new `SafeKey`s. Thus if we use the `SafeKey` we just created with test-coins we can create a second `SafeKey`:
 ```shell
 $ safe keys create --preload 8.15 --pay-with c4cc596d7321a3054d397beff82fe64f49c3896a07a349d31f29574ac9f56965
-New SafeKey created at: "safe://bbkulcbf2uuqwawvuonevraqa4ieu375qqrdpwvzi356edwkdjhwgd4dum"
+New SafeKey created: "safe://bbkulcbf2uuqwawvuonevraqa4ieu375qqrdpwvzi356edwkdjhwgd4dum"
 Preloaded with 8.15 testcoins
 Key pair generated:
 Public Key = 9754a42c0b568e692b10401c4129bff61088df6ae51bef883b28693d8c3e0e8ce23054e236bd64edc45791549ef60ce1
@@ -662,13 +706,9 @@ Secret Key = 2f211ad4606c716c2c2965e8ea2bd76a63bfc5a5936b792cda448ddea70a031c
 
 In this case, the new `SafeKey` is preloaded with coins which are transferred from the `SafeKey` we pay the operation with. In the next section we'll see how to check the coin balance of them.
 
-If we omit the `--pay-with` argument from the command above, or from any other command which supports it, the CLI will make use of the default `SafeKey` which is linked from the account for paying the costs of the operation. Upon the creation of a Safe Account, a default `SafeKey` is linked to it and used for paying the costs incurred in any operations made by the applications that have been authorised by the owner of that account, like it's the case of the `sn_cli` application. Currently it's not possible to change the default `SafeKey` linked from an account, but it will be possible with the `sn_cli` in the near future.
+If we omit the `--pay-with` (and without providing `--test-coins`) argument from the command above, or from any other command which supports it, the CLI will make use of its own `SafeKey` for paying the costs of the operation.
 
-Other optional args that can be used with the `keys create` sub-command are:
-```
---pk <pk>            Don't generate a key pair and just use the provided public key
---preload <preload>  Preload the SafeKey with a coin balance
-```
+Other optional arg that can be used with the `keys create` sub-command is the `--preload <amount>` argument to preload the SafeKey with a specific coin balance amount.
 
 #### SafeKey's Balance
 
@@ -685,7 +725,7 @@ SafeKey's current balance: 15.342000000
 
 #### SafeKeys Transfer
 
-We now have a `SafeKey` with a positive balance, we can transfer `--from` a `SafeKey` (using its secret key), an `<amount>` of safecoins, `--to` another `Wallet`, `SafeKey`, or public key. The destination `Wallet`/`SafeKey`/public key can be passed as an argument with `--to`, or it will be read from `stdin`. If we omit the `--from` argument, the application's default `SafeKey` will be used as the source of funds for the transfer.
+We now have a `SafeKey` with a positive balance, we can transfer `--from` a `SafeKey` (using its secret key), an `<amount>` of safecoins, `--to` another `Wallet`, `SafeKey`, or public key. The destination `Wallet`/`SafeKey`/public key can be passed as an argument with `--to`, or it will be read from `stdin`. If we omit the `--from` argument, the CLI's default `SafeKey` will be used as the source of funds for the transfer.
 
 ```shell
 $ safe keys transfer <amount> --from <source SafeKey secret key> --to <destination Wallet/SafeKey URL/public key>
@@ -695,29 +735,6 @@ E.g.:
 $ safe keys transfer 1.519 --from c4cc596d7321a3054d397beff82fe64f49c3896a07a349d31f29574ac9f56965 --to safe://bbkulcbf2uuqwawvuonevraqa4ieu375qqrdpwvzi356edwkdjhwgd4dum
 Success. TX_ID: 12584479662656231449
 ```
-
-### Key-pair
-
-There are some scenarios that being able to generate a sign/encryption key-pair, without creating and/or storing a `SafeKey` on the network, is required.
-
-As an example, if we want to have a friend to create a `SafeKey` for us, and preload it with some coins, we can generate a key-pair, and share with our friend only the public key so he/she can generate the `SafeKey` to be owned by it (this is where we can use the `--pk` argument on the `keys create` sub-command).
-
-Thus, let's see how this use case would work. First we create a key-pair:
-```shell
-$ safe keypair
-Key pair generated:
-Public Key = b2371df48684dc9456988f45b56d7640df63895fea3d7cee45c79b26ba268d259b864330b83fa28669ab910a1725b833
-Secret Key = 62e323615235122f7e20c7f05ddf56c5e5684853d21f65fca686b0bfb2ed851a
-```
-
-We now take note of both the public key, and the secret key. Now, we only share the public key with our friend, who can use it to generate a `SafeKey` to be owned by it and preload it with some test-coins:
-```shell
-$ safe keys create --test-coins --preload 64.24 --pk b2371df48684dc9456988f45b56d7640df63895fea3d7cee45c79b26ba268d259b864330b83fa28669ab910a1725b833
-New SafeKey created at: "safe://hodby8y3qgina9nqzxmsoi8ytjfh6gwnia7hdupo49ibt8yy3ytgdq"
-Preloaded with 64.24 coins
-```
-
-Finally, our friend gives us the XOR-URL of the `SafeKey` he/she has created for us. We own the balance this `SafeKey` holds since we have the secret key associated with it. Therefore we can now use the `SafeKey` for any operation, like creating an account with safe_auth CLI to then be able to store data on the Network.
 
 ### Wallet
 
@@ -775,7 +792,7 @@ For example, if we use the secret key we obtained when creating a `SafeKey` in o
 ```shell
 $ safe wallet create --pay-with 62e323615235122f7e20c7f05ddf56c5e5684853d21f65fca686b0bfb2ed851a --name first-spendable-balance
 Wallet created at: "safe://hnyybyqbp8d4u79f9sqhcxtdczgb76iif74cdsjif1wegik9t38diuk1yny9e"
-New SafeKey created at: "safe://hbyyyybqk69tpm67ecnzjg66tcrja3ugq81oh6gfaffwaty614rmttmyeu"
+New SafeKey created: "safe://hbyyyybqk69tpm67ecnzjg66tcrja3ugq81oh6gfaffwaty614rmttmyeu"
 Key pair generated:
 Public Key = b95efc5abf750c15d26f7a2c22719999c79439e317052d31107a5a22e3158113d6003af4980b72ff076813eda30f1d8b
 Secret Key = b9b2edffa8ef103dc98ba2160e295f98fdf981eb572bc2f8b018a12574ce435e
@@ -867,7 +884,7 @@ Success. TX_ID: 277748716389078887
 
 #### [ Warning: Underlying API to be deprecated ]
 
-The underlying files APIs used in the CLI, and perhaps much of the CLI will be deprecated in order to use [`sn_fs`](https://github.com/maidsafe/sn_fs) at some point. This is a POSIX based filesystem which is much more comprehensive and performant. It's not yet known the impact (if any) this will have on the CLI commands. But if you're interested in a filesystem on SAFE, `sn_fs` is most definitely where you should be looking at the moment.
+The underlying files APIs used in the CLI, and perhaps much of the CLI will be deprecated in order to use [`sn_fs`](https://github.com/maidsafe/sn_fs) at some point. This is a POSIX based filesystem which is much more comprehensive and performant. It's not yet known the impact (if any) this will have on the CLI commands. But if you're interested in a filesystem on Safe, `sn_fs` is most definitely where you should be looking at the moment.
 
 #### Files...
 

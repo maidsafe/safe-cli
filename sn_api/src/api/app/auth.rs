@@ -12,23 +12,27 @@ use super::{
     constants::{SN_AUTHD_ENDPOINT_HOST, SN_AUTHD_ENDPOINT_PORT},
     Safe,
 };
-use crate::api::ipc::IpcMsg;
-use crate::{Error, Result};
+use crate::{
+    api::ipc::{BootstrapConfig, IpcMsg, IpcResp},
+    Error, Result,
+};
 use log::{debug, info};
 use serde_json::json;
+use sn_data_types::Keypair;
+use std::path::Path;
 
 // Method for requesting application's authorisation
 const SN_AUTHD_METHOD_AUTHORISE: &str = "authorise";
 
 impl Safe {
-    // Generate an authorisation request string and send it to a SAFE Authenticator.
-    // It returns the credentials necessary to connect to the network, encoded in a single string.
+    /// Generate an authorisation request string and send it to a SAFE Authenticator.
+    /// It returns the credentials necessary to connect to the network, encoded in a single string.
     pub async fn auth_app(
         app_id: &str,
         app_name: &str,
         app_vendor: &str,
         endpoint: Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<Keypair> {
         // TODO: allow to accept all type of permissions to be passed as args to this API
         info!("Sending authorisation request to SAFE Authenticator...");
 
@@ -42,11 +46,11 @@ impl Safe {
         // Send the auth request to authd and obtain the response
         let auth_res = send_app_auth_req(&auth_req_str, endpoint).await?;
 
-        // Check if the app has been authorised
+        // Decode response and check if the app has been authorised
         match IpcMsg::from_string(&auth_res) {
-            Ok(IpcMsg::Resp(_ipc_resp)) => {
-                info!("Application was authorised: {:?}", auth_res);
-                Ok(auth_res)
+            Ok(IpcMsg::Resp(IpcResp::Auth(Ok(auth_granted)))) => {
+                info!("Application '{}' was authorised!", app_id);
+                Ok(auth_granted.app_keypair)
             }
             Ok(other) => {
                 info!("Unexpected messages received: {:?}", other);
@@ -56,18 +60,25 @@ impl Safe {
                 )))
             }
             Err(e) => {
-                info!("Application was not authorised");
+                info!("Application '{}' was not authorised", app_id);
                 Err(Error::AuthError(format!(
-                    "Application was not authorised: {:?}",
-                    e
+                    "Application '{}' was not authorised: {:?}",
+                    app_id, e
                 )))
             }
         }
     }
 
-    // Connect to the SAFE Network using the provided auth credentials
-    pub async fn connect(&mut self, auth_credentials: Option<&str>) -> Result<()> {
-        self.safe_client.connect(auth_credentials).await
+    /// Connect to the SAFE Network using the provided auth credentials
+    pub async fn connect(
+        &mut self,
+        app_keypair: Option<Keypair>,
+        config_path: Option<&Path>,
+        bootstrap_config: Option<BootstrapConfig>,
+    ) -> Result<()> {
+        self.safe_client
+            .connect(app_keypair, config_path, bootstrap_config)
+            .await
     }
 }
 

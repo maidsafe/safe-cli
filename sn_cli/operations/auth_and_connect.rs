@@ -7,9 +7,11 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
+use super::config::read_current_network_conn_info;
 use crate::{APP_ID, APP_NAME, APP_VENDOR};
+use anyhow::{anyhow, Context, Result};
 use log::{debug, info, warn};
-use sn_api::Safe;
+use sn_api::{Keypair, Safe};
 use std::{
     fs::{create_dir_all, File},
     io::{Read, Write},
@@ -18,33 +20,116 @@ use std::{
 
 const AUTH_CREDENTIALS_FILENAME: &str = "credentials";
 
-pub async fn authorise_cli(endpoint: Option<String>, is_self_authing: bool) -> Result<(), String> {
+pub async fn authorise_cli(endpoint: Option<String>, is_self_authing: bool) -> Result<()> {
     let (mut file, file_path) = create_credentials_file()?;
     println!("Authorising CLI application...");
     if !is_self_authing {
         println!("Note you can use this CLI from another console to authorise it with 'auth allow' command. Alternativelly, you can also use '--self-auth' flag with 'auth unlock' command to automatically self authorise the CLI app.");
     }
     println!("Waiting for authorising response from authd...");
-    let auth_credentials = Safe::auth_app(APP_ID, APP_NAME, APP_VENDOR, endpoint.as_deref())
+    let app_keypair = Safe::auth_app(APP_ID, APP_NAME, APP_VENDOR, endpoint.as_deref())
         .await
-        .map_err(|err| format!("Application authorisation failed: {}", err))?;
+        .context("Application authorisation failed")?;
 
-    file.write_all(auth_credentials.as_bytes()).map_err(|err| {
-        format!(
-            "Unable to write credentials in {}: {}",
-            file_path.display(),
-            err
-        )
-    })?;
+    let serialised_keypair = serde_json::to_string(&app_keypair)
+        .context("Unable to serialise the credentials obtained")?;
+
+    file.write_all(serialised_keypair.as_bytes())
+        .with_context(|| format!("Unable to write credentials in {}", file_path.display(),))?;
 
     println!("Safe CLI app was successfully authorised");
     println!("Credentials were stored in {}", file_path.display());
     Ok(())
 }
 
-pub fn clear_credentials() -> Result<(), String> {
-    let (_, file_path) =
-        create_credentials_file().map_err(|err| format!("Failed to clear credentials. {}", err))?;
+// Attempt to connect with credentials if found and valid,
+// otherwise it creates a read only connection.
+// Returns the app's keypair if connection was succesfully made with credentials,
+// otherwise it returns 'None' if conneciton is read only.
+pub async fn connect(safe: &mut Safe) -> Result<Option<Keypair>> {
+    debug!("Connecting...");
+
+    let app_keypair = if let Ok((_, keypair)) = read_credentials() {
+        keypair
+    } else {
+        None
+    };
+
+    let found_app_keypair = app_keypair.is_some();
+    if !found_app_keypair {
+        info!("No credentials found for CLI, connecting with read-only access...");
+    }
+
+    let (_, bootstrap_contacts) = read_current_network_conn_info()?;
+    let client_cfg = client_config_path();
+    match safe
+        .connect(
+            app_keypair.clone(),
+            client_cfg.as_deref(),
+            Some(bootstrap_contacts.clone()),
+        )
+        .await
+    {
+        Err(_) if found_app_keypair => {
+            warn!("Credentials found for CLI are invalid, connecting with read-only access...");
+            safe.connect(None, None, Some(bootstrap_contacts))
+                .await
+                .context("Failed to connect with read-only access")?;
+
+            Ok(None)
+        }
+        Err(err) => Err(anyhow!("Failed to connect: {}", err)),
+        Ok(()) => Ok(app_keypair),
+    }
+}
+
+pub fn create_credentials_file() -> Result<(File, PathBuf)> {
+    let (credentials_folder, file_path) = get_credentials_file_path()?;
+    if !credentials_folder.exists() {
+        println!("Creating '{}' folder", credentials_folder.display());
+        create_dir_all(credentials_folder)
+            .context("Couldn't create project's local data folder")?;
+    }
+    let file = File::create(&file_path)
+        .with_context(|| format!("Unable to open credentials file at {}", file_path.display()))?;
+
+    Ok((file, file_path))
+}
+
+pub fn read_credentials() -> Result<(PathBuf, Option<Keypair>)> {
+    let (_, file_path) = get_credentials_file_path()?;
+
+    let keypair = if let Ok(mut file) = File::open(&file_path) {
+        let mut credentials = String::new();
+        match file.read_to_string(&mut credentials) {
+            Ok(_) if credentials.is_empty() => None,
+            Ok(_) => {
+                let keypair = serde_json::from_str(&credentials).with_context(|| {
+                    format!(
+                        "Unable to parse the credentials read from {}",
+                        file_path.display(),
+                    )
+                })?;
+                Some(keypair)
+            }
+            Err(err) => {
+                debug!(
+                    "Unable to read credentials from {}: {}",
+                    file_path.display(),
+                    err
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    Ok((file_path, keypair))
+}
+
+pub fn clear_credentials() -> Result<()> {
+    let (_, file_path) = create_credentials_file().context("Failed to clear credentials")?;
 
     println!(
         "Credentials were succesfully cleared from {}",
@@ -53,51 +138,11 @@ pub fn clear_credentials() -> Result<(), String> {
     Ok(())
 }
 
-pub async fn connect(safe: &mut Safe) -> Result<(), String> {
-    debug!("Connecting...");
-
-    let auth_credentials = match get_credentials_file_path() {
-        Ok((_, file_path)) => {
-            if let Ok(mut file) = File::open(&file_path) {
-                let mut credentials = String::new();
-                match file.read_to_string(&mut credentials) {
-                    Err(err) => {
-                        debug!(
-                            "Unable to read credentials from {}: {}",
-                            file_path.display(),
-                            err
-                        );
-                        None
-                    }
-                    Ok(_) if credentials.is_empty() => None,
-                    Ok(_) => Some(credentials),
-                }
-            } else {
-                None
-            }
-        }
-        Err(_) => None,
-    };
-
-    if auth_credentials.is_none() {
-        info!("No credentials found for CLI, connecting with read-only access...");
-    }
-
-    match safe.connect(auth_credentials.as_deref()).await {
-        Err(_err) if auth_credentials.is_some() => {
-            warn!("Credentials found for CLI are invalid, connecting with read-only access...");
-            safe.connect(None).await
-        }
-        other => other,
-    }
-    .map_err(|err| format!("Failed to connect: {}", err))
-}
-
 // Private helpers
 
-fn get_credentials_file_path() -> Result<(PathBuf, PathBuf), String> {
+fn get_credentials_file_path() -> Result<(PathBuf, PathBuf)> {
     let mut project_data_path =
-        dirs_next::home_dir().ok_or_else(|| "Failed to obtain user's home path".to_string())?;
+        dirs_next::home_dir().ok_or_else(|| anyhow!("Failed to obtain user's home path"))?;
 
     project_data_path.push(".safe");
     project_data_path.push("cli");
@@ -108,15 +153,11 @@ fn get_credentials_file_path() -> Result<(PathBuf, PathBuf), String> {
     Ok((credentials_folder, file_path))
 }
 
-fn create_credentials_file() -> Result<(File, PathBuf), String> {
-    let (credentials_folder, file_path) = get_credentials_file_path()?;
-    if !credentials_folder.exists() {
-        println!("Creating '{}' folder", credentials_folder.display());
-        create_dir_all(credentials_folder)
-            .map_err(|err| format!("Couldn't create project's local data folder: {}", err))?;
-    }
-    let file = File::create(&file_path)
-        .map_err(|_| format!("Unable to open credentials file at {}", file_path.display()))?;
+fn client_config_path() -> Option<PathBuf> {
+    let mut client_cfg_path = dirs_next::home_dir()?;
+    client_cfg_path.push(".safe");
+    client_cfg_path.push("client");
+    client_cfg_path.push("sn_client.config");
 
-    Ok((file, file_path))
+    Some(client_cfg_path)
 }

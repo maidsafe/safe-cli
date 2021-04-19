@@ -11,11 +11,11 @@ use anyhow::{anyhow, bail, Context, Result};
 use multibase::{encode, Base};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use sn_api::{
-    fetch::SafeData, files::ProcessedFiles, wallet::WalletSpendableBalances, xorurl::XorUrlEncoder,
+    fetch::SafeData, files::ProcessedFiles, safeurl::SafeUrl, wallet::WalletSpendableBalances,
     Keypair,
 };
 use std::{collections::BTreeMap, env, fs, path::Path, process};
-use tiny_keccak::sha3_256;
+use tiny_keccak::{Hasher, Sha3};
 use walkdir::{DirEntry, WalkDir};
 
 #[macro_use]
@@ -286,7 +286,11 @@ fn not_hidden_or_empty(entry: &DirEntry, max_depth: usize) -> bool {
 
 // returns sha3_256 hash of input string as a string.
 pub fn str_to_sha3_256(s: &str) -> String {
-    let bytes = sha3_256(&s.to_string().into_bytes());
+    let s_bytes = s.as_bytes();
+    let mut hasher = Sha3::v256();
+    let mut bytes = [0; 32];
+    hasher.update(&s_bytes);
+    hasher.finalize(&mut bytes);
     encode(Base::Base32, bytes)
 }
 
@@ -303,8 +307,8 @@ pub fn get_random_nrs_string() -> String {
 }
 
 #[allow(dead_code)]
-pub fn xorurl_encoder_from(url: &str) -> Result<XorUrlEncoder> {
-    XorUrlEncoder::from_url(url).map_err(|e| anyhow!("Failed to parse URL: {}", e))
+pub fn safeurl_from(url: &str) -> Result<SafeUrl> {
+    SafeUrl::from_url(url).map_err(|e| anyhow!("Failed to parse URL: {}", e))
 }
 
 #[allow(dead_code)]

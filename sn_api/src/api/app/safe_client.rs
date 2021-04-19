@@ -8,22 +8,19 @@
 // Software.
 
 use super::{fetch::Range, helpers::xorname_to_hex};
-use crate::{
-    api::ipc::{IpcMsg, IpcResp},
-    Error, Result,
-};
-
+use crate::{api::ipc::BootstrapConfig, Error, Result};
 use log::{debug, info};
-use sn_client::{Client, ClientError as SafeClientError};
+use sn_client::{Client, Error as ClientError, ErrorMessage, TransfersError};
 use sn_data_types::{
     BlobAddress, Error as SafeNdError, Keypair, Map, MapAction, MapAddress, MapEntryActions,
-    MapPermissionSet, MapSeqEntryActions, MapSeqValue, MapValue, Money, PublicKey, SequenceAddress,
-    SequenceIndex, SequencePrivatePermissions, SequencePublicPermissions, SequenceUser,
+    MapPermissionSet, MapSeqEntryActions, MapSeqValue, MapValue, PublicKey, SequenceAddress,
+    SequencePrivatePermissions, SequencePublicPermissions, SequenceUser, Token,
 };
-
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::{collections::HashSet, net::SocketAddr};
+use std::{
+    collections::{BTreeMap, HashSet},
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 use xor_name::XorName;
 
 const APP_NOT_CONNECTED: &str = "Application is not connected to the network";
@@ -32,6 +29,7 @@ const APP_NOT_CONNECTED: &str = "Application is not connected to the network";
 pub struct SafeAppClient {
     safe_client: Option<Client>,
     pub(crate) bootstrap_config: Option<HashSet<SocketAddr>>,
+    config_path: Option<PathBuf>,
 }
 
 impl SafeAppClient {
@@ -47,34 +45,24 @@ impl SafeAppClient {
         Self {
             safe_client: None,
             bootstrap_config: None,
+            config_path: None,
         }
     }
 
-    // Connect to the SAFE Network using the provided auth credentials
-    pub async fn connect(&mut self, auth_credentials: Option<&str>) -> Result<()> {
+    // Connect to the SAFE Network using the keypair if provided. Contacts list
+    // are overriden if a 'bootstrap_config' is provided.
+    pub async fn connect(
+        &mut self,
+        app_keypair: Option<Keypair>,
+        config_path: Option<&Path>,
+        bootstrap_config: Option<BootstrapConfig>,
+    ) -> Result<()> {
         debug!("Connecting to SAFE Network...");
+        if bootstrap_config.is_some() {
+            self.bootstrap_config = bootstrap_config;
+        }
 
-        let app_keypair = if let Some(auth_credentials) = auth_credentials {
-            match IpcMsg::from_string(auth_credentials)? {
-                IpcMsg::Resp(IpcResp::Auth(Ok(auth_granted))) => {
-                    self.bootstrap_config = Some(auth_granted.bootstrap_config);
-                    Some(auth_granted.app_keypair)
-                }
-                IpcMsg::Resp(IpcResp::Unregistered(Ok(bootstrap_config))) => {
-                    // unregistered type used for returning bootstrap config for client
-                    self.bootstrap_config = Some(bootstrap_config);
-                    None
-                }
-                IpcMsg::Resp(IpcResp::Auth(Err(e)))
-                | IpcMsg::Resp(IpcResp::Unregistered(Err(e)))
-                | IpcMsg::Err(e) => return Err(Error::AuthError(format!("{:?}", e))),
-                IpcMsg::Req(req) => {
-                    return Err(Error::AuthError(format!("Invalid credentials: {:?}", req)))
-                }
-            }
-        } else {
-            None
-        };
+        self.config_path = config_path.map(|p| p.to_path_buf());
 
         debug!(
             "Client to be instantiated with specific pk?: {:?}",
@@ -84,11 +72,15 @@ impl SafeAppClient {
             "Bootstrap contacts list set to: {:?}",
             self.bootstrap_config
         );
-        let client = Client::new(app_keypair, self.bootstrap_config.clone())
-            .await
-            .map_err(|err| {
-                Error::ConnectionError(format!("Failed to connect to the SAFE Network: {:?}", err))
-            })?;
+        let client = Client::new(
+            app_keypair,
+            self.config_path.as_deref(),
+            self.bootstrap_config.clone(),
+        )
+        .await
+        .map_err(|err| {
+            Error::ConnectionError(format!("Failed to connect to the SAFE Network: {:?}", err))
+        })?;
 
         self.safe_client = Some(client);
 
@@ -96,25 +88,42 @@ impl SafeAppClient {
         Ok(())
     }
 
-    // === Money operations ===
-    pub async fn read_balance_from_keypair(&self, id: Arc<Keypair>) -> Result<Money> {
-        let temp_client = Client::new(Some(id), self.bootstrap_config.clone()).await?;
-        temp_client.get_balance().await.map_err(|err| match err {
-            SafeClientError::DataError(SafeNdError::NoSuchBalance) => {
+    pub async fn keypair(&self) -> Result<Keypair> {
+        let client = self.get_safe_client()?;
+        Ok(client.keypair().await)
+    }
+
+    // === Token operations ===
+    pub async fn read_balance_from_keypair(&self, id: Keypair) -> Result<Token> {
+        let temp_client = Client::new(
+            Some(id),
+            self.config_path.as_deref(),
+            self.bootstrap_config.clone(),
+        )
+        .await?;
+        temp_client.get_balance().await.map_err(|err| {
+            // FIXME: we need to match the appropriate error
+            // to map it to our Error::ContentNotFound
+            /*ClientError::NetworkDataError(??) => {
                 Error::ContentNotFound("No SafeKey found at specified location".to_string())
-            }
-            other => Error::NetDataError(format!("Failed to retrieve balance: {:?}", other)),
+            }*/
+            Error::NetDataError(format!("Failed to retrieve balance: {:?}", err))
         })
     }
 
     #[cfg(feature = "simulated-payouts")]
     pub async fn trigger_simulated_farming_payout(
         &mut self,
-        amount: Money,
-        id: Option<Arc<Keypair>>,
+        amount: Token,
+        id: Option<Keypair>,
     ) -> Result<()> {
         let mut client = if id.is_some() {
-            Client::new(id, self.bootstrap_config.clone()).await?
+            Client::new(
+                id,
+                self.config_path.as_deref(),
+                self.bootstrap_config.clone(),
+            )
+            .await?
         } else {
             self.get_safe_client()?
         };
@@ -126,9 +135,9 @@ impl SafeAppClient {
 
     pub async fn safecoin_transfer_to_xorname(
         &self,
-        from_id: Option<Arc<Keypair>>,
+        from_id: Option<Keypair>,
         to_xorname: XorName,
-        amount: Money,
+        amount: Token,
     ) -> Result<u64> {
         // Get pk from xorname. We assume Ed25519 key for now, which is
         // 32 bytes long, just like a xorname.
@@ -146,27 +155,37 @@ impl SafeAppClient {
 
     pub async fn safecoin_transfer_to_pk(
         &self,
-        from_id: Option<Arc<Keypair>>,
+        from_id: Option<Keypair>,
         to_pk: PublicKey,
-        amount: Money,
+        amount: Token,
     ) -> Result<u64> {
         let client = match from_id {
-            Some(id) => Client::new(Some(id), self.bootstrap_config.clone()).await?,
+            Some(id) => {
+                Client::new(
+                    Some(id),
+                    self.config_path.as_deref(),
+                    self.bootstrap_config.clone(),
+                )
+                .await?
+            }
             None => self.get_safe_client()?,
         };
 
         let (dot_counter, _dot_actor) =
             client
-                .send_money(to_pk, amount)
+                .send_tokens(to_pk, amount)
                 .await
                 .map_err(|err| match err {
-                    SafeClientError::DataError(SafeNdError::InsufficientBalance) => {
+                    ClientError::Transfer(TransfersError::ZeroValueTransfer) => {
+                        Error::InvalidAmount("Cannot send zero-value transfers".to_string())
+                    }
+                    ClientError::Transfer(TransfersError::InsufficientBalance) => {
                         Error::NotEnoughBalance(format!(
                             "Not enough balance at 'source' for the operation: {}",
                             amount
                         ))
                     }
-                    SafeClientError::DataError(SafeNdError::ExcessiveValue) => {
+                    ClientError::NetworkDataError(SafeNdError::ExcessiveValue) => {
                         Error::InvalidAmount(format!(
                             "The amount '{}' specified for the transfer is invalid",
                             amount
@@ -290,16 +309,19 @@ impl SafeAppClient {
             .get_map_value(address, key_vec)
             .await
             .map_err(|err| match err {
-                SafeClientError::DataError(SafeNdError::AccessDenied) => {
+                ClientError::ErrorMessage(ErrorMessage::AccessDenied(_pk))
+                | ClientError::NetworkDataError(SafeNdError::AccessDenied(_pk)) => {
                     Error::AccessDenied(format!("Failed to retrieve a key: {:?}", key))
                 }
-                SafeClientError::DataError(SafeNdError::NoSuchData) => {
+                // FIXME: we need to match the appropriate error
+                // to map it to our Error::ContentNotFound
+                /*ClientError::NetworkDataError(??) => {
                     Error::ContentNotFound(format!(
                         "Sequenced Map not found at Xor name: {}",
                         xorname_to_hex(&name)
                     ))
-                }
-                SafeClientError::DataError(SafeNdError::NoSuchEntry) => {
+                }*/
+                ClientError::NetworkDataError(SafeNdError::NoSuchEntry) => {
                     Error::EntryNotFound(format!(
                         "Entry not found in Sequenced Map found at Xor name: {}",
                         xorname_to_hex(&name)
@@ -319,20 +341,22 @@ impl SafeAppClient {
             .list_seq_map_entries(name, tag)
             .await
             .map_err(|err| match err {
-                SafeClientError::DataError(SafeNdError::AccessDenied) => {
+                ClientError::NetworkDataError(SafeNdError::AccessDenied(_pk)) => {
                     Error::AccessDenied(format!(
                         "Failed to get Sequenced Map at: {:?} (type tag: {})",
                         name, tag
                     ))
                 }
-                SafeClientError::DataError(SafeNdError::NoSuchData) => {
+                // FIXME: we need to match the appropriate error
+                // to map it to our Error::ContentNotFound
+                /*ClientError::NetworkDataError(??) => {
                     Error::ContentNotFound(format!(
                         "Sequenced Map not found at Xor name: {} (type tag: {})",
                         xorname_to_hex(&name),
                         tag
                     ))
-                }
-                SafeClientError::DataError(SafeNdError::NoSuchEntry) => {
+                }*/
+                ClientError::NetworkDataError(SafeNdError::NoSuchEntry) => {
                     Error::EntryNotFound(format!(
                         "Entry not found in Sequenced Map found at Xor name: {} (type tag: {})",
                         xorname_to_hex(&name),
@@ -357,7 +381,7 @@ impl SafeAppClient {
             .edit_map_entries(address, MapEntryActions::Seq(entry_actions))
             .await
             .map_err(|err| {
-                if let SafeClientError::DataError(SafeNdError::InvalidEntryActions(_)) = err {
+                if let ClientError::NetworkDataError(SafeNdError::InvalidEntryActions(_)) = err {
                     Error::EntryExists(format!("{}: {}", message, err))
                 } else {
                     Error::NetDataError(format!("{}: {}", message, err))
@@ -406,7 +430,7 @@ impl SafeAppClient {
         let _address = if private {
             // Set permissions for append, delete, and manage perms to this application
             let mut perms = BTreeMap::default();
-            let _ = perms.insert(owner, SequencePrivatePermissions::new(true, true, true));
+            let _ = perms.insert(owner, SequencePrivatePermissions::new(true, true));
 
             client
                 .store_private_sequence(Some(vec![data.to_vec()]), xorname, tag, owner, perms)
@@ -418,7 +442,7 @@ impl SafeAppClient {
             // Set permissions for append and manage perms to this application
             let user_app = SequenceUser::Key(owner);
             let mut perms = BTreeMap::default();
-            let _ = perms.insert(user_app, SequencePublicPermissions::new(true, true));
+            let _ = perms.insert(user_app, SequencePublicPermissions::new(true));
 
             client
                 .store_public_sequence(Some(vec![data.to_vec()]), xorname, tag, owner, perms)
@@ -456,7 +480,7 @@ impl SafeAppClient {
             .get_sequence_last_entry(sequence_address)
             .await
             .map_err(|err| {
-                if let SafeClientError::DataError(SafeNdError::NoSuchEntry) = err {
+                if let ClientError::NetworkDataError(SafeNdError::NoSuchEntry) = err {
                     Error::EmptyContent(format!("Empty Sequence found at XoR name {}", name))
                 } else {
                     Error::NetDataError(format!(
@@ -488,14 +512,12 @@ impl SafeAppClient {
         } else {
             SequenceAddress::Public { name, tag }
         };
-        let start = SequenceIndex::FromStart(index);
-        let end = SequenceIndex::FromStart(index + 1);
 
-        let res = client
-            .get_sequence_range(sequence_address, (start, end))
+        let entry = client
+            .get_sequence_entry(sequence_address, index)
             .await
             .map_err(|err| {
-                if let SafeClientError::DataError(SafeNdError::NoSuchEntry) = err {
+                if let ClientError::NetworkDataError(SafeNdError::NoSuchEntry) = err {
                     Error::VersionNotFound(format!(
                         "Invalid version ({}) for Sequence found at XoR name {}",
                         index, name
@@ -507,13 +529,6 @@ impl SafeAppClient {
                     ))
                 }
             })?;
-
-        let entry = res.get(0).ok_or_else(|| {
-            Error::EmptyContent(format!(
-                "Empty Sequence found at Xor name {}",
-                xorname_to_hex(&name)
-            ))
-        })?;
 
         Ok(entry.to_vec())
     }

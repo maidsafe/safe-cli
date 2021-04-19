@@ -7,35 +7,25 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use log::debug;
-use structopt::StructOpt;
-
 use crate::{
     operations::safe_net::connect,
     shell,
     subcommands::{
-        auth::auth_commander,
-        cat::cat_commander,
-        config::config_commander,
-        dog::dog_commander,
-        files::files_commander,
-        keys::{key_commander, keypair_to_hex_strings},
-        networks::networks_commander,
-        node::node_commander,
-        nrs::nrs_commander,
-        seq::seq_commander,
-        setup::setup_commander,
-        update::update_commander,
-        wallet::wallet_commander,
-        xorurl::xorurl_commander,
-        OutputFmt, SubCommands,
+        auth::auth_commander, cat::cat_commander, config::config_commander, dog::dog_commander,
+        files::files_commander, keys::key_commander, networks::networks_commander,
+        node::node_commander, nrs::nrs_commander, seq::seq_commander, setup::setup_commander,
+        update::update_commander, wallet::wallet_commander, xorurl::xorurl_commander, OutputFmt,
+        SubCommands,
     },
 };
-use sn_api::{xorurl::XorUrlBase, Safe};
+use anyhow::{anyhow, Result};
+use log::debug;
+use sn_api::{safeurl::XorUrlBase, Safe};
+use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
 
 #[derive(StructOpt, Debug)]
 /// Interact with the Safe Network
-#[structopt(global_settings(&[structopt::clap::AppSettings::ColoredHelp]))]
+#[structopt(global_settings(&[ColoredHelp]))]
 pub struct CmdArgs {
     /// subcommands
     #[structopt(subcommand)]
@@ -60,16 +50,16 @@ pub struct CmdArgs {
     pub endpoint: Option<String>,
 }
 
-pub async fn run() -> Result<(), String> {
+pub async fn run() -> Result<()> {
     let mut safe = Safe::default();
     run_with(None, &mut safe).await
 }
 
-pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<(), String> {
+pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<()> {
     // Let's first get all the arguments passed in, either as function's args, or CLI args
     let args = match cmd_args {
         None => CmdArgs::from_args(),
-        Some(cmd_args) => CmdArgs::from_iter_safe(cmd_args).map_err(|err| err.to_string())?,
+        Some(cmd_args) => CmdArgs::from_iter_safe(cmd_args)?,
     };
 
     let prev_base = safe.xorurl_base;
@@ -89,33 +79,17 @@ pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<(), 
     debug!("Processing command: {:?}", args);
 
     let result = match args.cmd {
-        Some(SubCommands::Config { cmd }) => config_commander(cmd),
-        Some(SubCommands::Networks { cmd }) => networks_commander(cmd),
-        Some(SubCommands::Keypair {}) => {
-            let key_pair = safe.keypair();
-            if OutputFmt::Pretty == output_fmt {
-                println!("Key pair generated:");
-            }
-
-            match keypair_to_hex_strings(&key_pair) {
-                Ok((pk_hex, sk_hex)) => {
-                    println!("Public Key = {}", pk_hex);
-                    println!("Secret Key = {}", sk_hex);
-                }
-                Err(err) => println!("{}", err),
-            }
-
-            Ok(())
-        }
+        Some(SubCommands::Config { cmd }) => config_commander(cmd).await,
+        Some(SubCommands::Networks { cmd }) => networks_commander(cmd).await,
         Some(SubCommands::Update {}) => {
             // We run this command in a separate thread to overcome a conflict with
             // the self_update crate as it seems to be creating its own runtime.
             let handler = std::thread::spawn(|| {
-                update_commander().map_err(|err| format!("Error performing update: {}", err))
+                update_commander().map_err(|err| anyhow!("Error performing update: {}", err))
             });
             handler
                 .join()
-                .map_err(|err| format!("Failed to run self update: {:?}", err))?
+                .map_err(|err| anyhow!("Failed to run self update: {:?}", err))?
         }
         Some(SubCommands::Setup(cmd)) => setup_commander(cmd, output_fmt),
         Some(SubCommands::Xorurl {
@@ -124,7 +98,7 @@ pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<(), 
             recursive,
             follow_links,
         }) => xorurl_commander(cmd, location, recursive, follow_links, output_fmt, safe).await,
-        Some(SubCommands::Node { cmd }) => node_commander(cmd),
+        Some(SubCommands::Node { cmd }) => node_commander(cmd).await,
         Some(SubCommands::Auth { cmd }) => auth_commander(cmd, args.endpoint, safe).await,
         Some(other) => {
             // We treat these separatelly since we use the credentials if they are available to
@@ -139,7 +113,7 @@ pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<(), 
                 SubCommands::Files(cmd) => files_commander(cmd, output_fmt, args.dry, safe).await,
                 SubCommands::Nrs(cmd) => nrs_commander(cmd, output_fmt, args.dry, safe).await,
                 SubCommands::Seq(cmd) => seq_commander(cmd, output_fmt, safe).await,
-                _ => Err("Unknown safe subcommand".to_string()),
+                _ => Err(anyhow!("Unknown safe subcommand")),
             }
         }
         None => shell::shell_run(), // then enter in interactive shell

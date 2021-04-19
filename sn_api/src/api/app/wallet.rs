@@ -10,14 +10,13 @@
 use super::common::ed_sk_from_hex;
 use super::helpers::{parse_coins_amount, pk_from_hex, xorname_to_hex};
 use crate::{
-    xorurl::{SafeContentType, SafeDataType, XorUrl, XorUrlEncoder},
+    api::app::safeurl::{SafeContentType, SafeDataType, SafeUrl, XorUrl},
     Error, Result, Safe,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use sn_data_types::{Keypair, MapValue, Money};
+use sn_data_types::{Keypair, MapValue, Token};
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use xor_name::XorName;
 
 // Type tag used for the Wallet container
@@ -42,7 +41,7 @@ impl Safe {
             .store_map(None, WALLET_TYPE_TAG, None, None)
             .await?;
 
-        XorUrlEncoder::encode_mutable_data(
+        SafeUrl::encode_mutable_data(
             xorname,
             WALLET_TYPE_TAG,
             SafeContentType::Wallet,
@@ -60,9 +59,9 @@ impl Safe {
     ) -> Result<String> {
         // TODO: we need URLs / hex indication of which keytype this is....
         let acutal_sk = ed_sk_from_hex(sk)?;
-        let keypair = Arc::new(Keypair::from(acutal_sk));
+        let keypair = Keypair::from(acutal_sk);
         let xorname = XorName::from(keypair.public_key());
-        let xorurl = XorUrlEncoder::encode_safekey(xorname, self.xorurl_base)?;
+        let xorurl = SafeUrl::encode_safekey(xorname, self.xorurl_base)?;
 
         let value = WalletSpendableBalance {
             xorurl: xorurl.clone(),
@@ -77,10 +76,10 @@ impl Safe {
         })?;
 
         let md_key = name.unwrap_or(&xorurl);
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let (safeurl, _) = self.parse_and_resolve_url(url).await?;
         self.safe_client
             .map_insert(
-                xorurl_encoder.xorname(),
+                safeurl.xorname(),
                 WALLET_TYPE_TAG,
                 &md_key.to_string().into_bytes(),
                 &serialised_value.into_bytes(),
@@ -105,7 +104,7 @@ impl Safe {
             match self
                 .safe_client
                 .map_insert(
-                    xorurl_encoder.xorname(),
+                    safeurl.xorname(),
                     WALLET_TYPE_TAG,
                     WALLET_DEFAULT_BYTES,
                     &default_key,
@@ -116,7 +115,7 @@ impl Safe {
                     let (_, version) = self.wallet_get_default_balance(url).await?;
                     self.safe_client
                         .update_map(
-                            xorurl_encoder.xorname(),
+                            safeurl.xorname(),
                             WALLET_TYPE_TAG,
                             WALLET_DEFAULT_BYTES,
                             &default_key,
@@ -136,29 +135,21 @@ impl Safe {
     // Check the total balance of a Wallet found at a given XOR-URL
     pub async fn wallet_balance(&mut self, url: &str) -> Result<String> {
         debug!("Finding total wallet balance for: {:?}", url);
-        let mut total_balance = Money::from_nano(0);
+        let mut total_balance = Token::from_nano(0);
 
         // Let's get the list of balances from the Wallet
-        let (xorurl_encoder, nrs_xorurl_encoder) = self.parse_and_resolve_url(url).await?;
-        debug!(
-            "Wallet URL was parsed and resolved to: {:?}",
-            xorurl_encoder
-        );
-        let url_path = if let Some(nrs_url) = nrs_xorurl_encoder {
+        let (safeurl, nrs_safeurl) = self.parse_and_resolve_url(url).await?;
+        debug!("Wallet URL was parsed and resolved to: {:?}", safeurl);
+        let url_path = if let Some(nrs_url) = nrs_safeurl {
             nrs_url.path().to_string()
         } else {
-            xorurl_encoder.path().to_string()
+            safeurl.path().to_string()
         };
 
         let balances = if url_path.is_empty() {
             debug!("We'll check the total balance of the Wallet");
-            gen_wallet_spendable_balances_list(
-                self,
-                xorurl_encoder.xorname(),
-                xorurl_encoder.type_tag(),
-                url,
-            )
-            .await?
+            gen_wallet_spendable_balances_list(self, safeurl.xorname(), safeurl.type_tag(), url)
+                .await?
         } else {
             let balance_name = &url_path[1..]; // we get rid of starting '/'
             debug!(
@@ -167,8 +158,8 @@ impl Safe {
             );
             let (spendable_balance, _) = wallet_get_spendable_balance(
                 self,
-                xorurl_encoder.xorname(),
-                xorurl_encoder.type_tag(),
+                safeurl.xorname(),
+                safeurl.type_tag(),
                 balance_name.as_bytes(),
             )
             .await
@@ -191,7 +182,7 @@ impl Safe {
             debug!("Checking wallet of name: {:?}", name);
             let secret_key = ed_sk_from_hex(&balance.sk)?;
 
-            let id = Arc::new(Keypair::from(secret_key));
+            let id = Keypair::from(secret_key);
             let current_balance = self
                 .safe_client
                 .read_balance_from_keypair(id)
@@ -219,14 +210,10 @@ impl Safe {
         &mut self,
         url: &str,
     ) -> Result<(WalletSpendableBalance, u64)> {
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
+        let (safeurl, _) = self.parse_and_resolve_url(url).await?;
         let default = self
             .safe_client
-            .map_get_value(
-                xorurl_encoder.xorname(),
-                xorurl_encoder.type_tag(),
-                WALLET_DEFAULT_BYTES,
-            )
+            .map_get_value(safeurl.xorname(), safeurl.type_tag(), WALLET_DEFAULT_BYTES)
             .await
             .map_err(|err| match err {
                 Error::AccessDenied(_) => Error::AccessDenied(format!(
@@ -244,19 +231,14 @@ impl Safe {
         let default_data = match default {
             MapValue::Seq(value) => value.data,
             MapValue::Unseq(_) => {
-                return Err(Error::ClientError(
+                return Err(Error::ContentError(
                     "Wallet could not be parsed as wallet map is unsequenced.".to_string(),
                 ))
             }
         };
 
-        wallet_get_spendable_balance(
-            self,
-            xorurl_encoder.xorname(),
-            xorurl_encoder.type_tag(),
-            &default_data,
-        )
-        .await
+        wallet_get_spendable_balance(self, safeurl.xorname(), safeurl.type_tag(), &default_data)
+            .await
     }
 
     /// # Transfer safecoins from one Wallet to another
@@ -307,55 +289,50 @@ impl Safe {
         let amount_coins = parse_coins_amount(amount)?;
 
         // Check if 'from_wallet_url' is a valid Wallet URL
-        let (from_xorurl_encoder, from_nrs_xorurl_encoder) = self
+        let (from_safeurl, from_nrs_safeurl) = self
             .parse_and_resolve_url(&from_wallet_url)
             .await
             .map_err(|_| {
-                Error::InvalidInput(format!(
-                    "Failed to parse the 'from' URL: {}",
-                    from_wallet_url
-                ))
-            })?;
+            Error::InvalidInput(format!(
+                "Failed to parse the 'from' URL: {}",
+                from_wallet_url
+            ))
+        })?;
 
-        if from_xorurl_encoder.content_type() != SafeContentType::Wallet {
+        if from_safeurl.content_type() != SafeContentType::Wallet {
             return Err(Error::InvalidInput(format!(
                 "The 'from_url' URL doesn't target a Wallet, it is: {:?} ({})",
-                from_xorurl_encoder.content_type(),
-                from_xorurl_encoder.data_type()
+                from_safeurl.content_type(),
+                from_safeurl.data_type()
             )));
         }
 
         // realise which is the source spendable balance to be used
-        let from_spendable_balance = resolve_wallet_url(
-            self,
-            from_wallet_url,
-            from_xorurl_encoder,
-            from_nrs_xorurl_encoder,
-        )
-        .await?;
+        let from_spendable_balance =
+            resolve_wallet_url(self, from_wallet_url, from_safeurl, from_nrs_safeurl).await?;
         let from_sk = ed_sk_from_hex(&from_spendable_balance.sk)?;
-        let from = Some(Arc::new(Keypair::from(from_sk)));
+        let from = Some(Keypair::from(from_sk));
 
         let result = if to.starts_with("safe://") {
             // Now check if the 'to_url' is a valid Wallet or a SafeKey URL
-            let (to_xorurl_encoder, to_nrs_xorurl_encoder) =
+            let (to_safeurl, to_nrs_safeurl) =
                 self.parse_and_resolve_url(to).await.map_err(|_| {
                     Error::InvalidInput(format!("Failed to parse the 'to' URL: {}", to))
                 })?;
 
-            let to_xorname = if to_xorurl_encoder.content_type() == SafeContentType::Wallet {
+            let to_xorname = if to_safeurl.content_type() == SafeContentType::Wallet {
                 let to_wallet_balance =
-                    resolve_wallet_url(self, to, to_xorurl_encoder, to_nrs_xorurl_encoder).await?;
-                XorUrlEncoder::from_url(&to_wallet_balance.xorurl)?.xorname()
-            } else if to_xorurl_encoder.content_type() == SafeContentType::Raw
-                && to_xorurl_encoder.data_type() == SafeDataType::SafeKey
+                    resolve_wallet_url(self, to, to_safeurl, to_nrs_safeurl).await?;
+                SafeUrl::from_url(&to_wallet_balance.xorurl)?.xorname()
+            } else if to_safeurl.content_type() == SafeContentType::Raw
+                && to_safeurl.data_type() == SafeDataType::SafeKey
             {
-                to_xorurl_encoder.xorname()
+                to_safeurl.xorname()
             } else {
                 return Err(Error::InvalidInput(format!(
                     "The destination URL doesn't target a SafeKey or Wallet, target is: {:?} ({})",
-                    to_xorurl_encoder.content_type(),
-                    to_xorurl_encoder.data_type()
+                    to_safeurl.content_type(),
+                    to_safeurl.data_type()
                 )));
             };
 
@@ -384,20 +361,20 @@ impl Safe {
     }
 
     pub async fn wallet_get(&mut self, url: &str) -> Result<WalletSpendableBalances> {
-        let (xorurl_encoder, _) = self.parse_and_resolve_url(url).await?;
-        self.fetch_wallet(&xorurl_encoder).await
+        let (safeurl, _) = self.parse_and_resolve_url(url).await?;
+        self.fetch_wallet(&safeurl).await
     }
 
-    /// Fetch a Wallet from a XorUrlEncoder without performing any type of URL resolution
+    /// Fetch a Wallet from a SafeUrl without performing any type of URL resolution
     pub(crate) async fn fetch_wallet(
         &mut self,
-        xorurl_encoder: &XorUrlEncoder,
+        safeurl: &SafeUrl,
     ) -> Result<WalletSpendableBalances> {
         gen_wallet_spendable_balances_list(
             self,
-            xorurl_encoder.xorname(),
-            xorurl_encoder.type_tag(),
-            &xorurl_encoder.to_string(),
+            safeurl.xorname(),
+            safeurl.type_tag(),
+            &safeurl.to_string(),
         )
         .await
     }
@@ -484,7 +461,7 @@ async fn wallet_get_spendable_balance(
             })? {
             MapValue::Seq(data) => data,
             MapValue::Unseq(_) => {
-                return Err(Error::ClientError(
+                return Err(Error::ContentError(
                     "Wallet could not be parsed as wallet map is unsequenced.".to_string(),
                 ))
             }
@@ -505,13 +482,13 @@ async fn wallet_get_spendable_balance(
 async fn resolve_wallet_url(
     safe: &mut Safe,
     wallet_url: &str,
-    xorurl_encoder: XorUrlEncoder,
-    nrs_xorurl_encoder: Option<XorUrlEncoder>,
+    safeurl: SafeUrl,
+    nrs_safeurl: Option<SafeUrl>,
 ) -> Result<WalletSpendableBalance> {
-    let url_path = if let Some(nrs_url) = nrs_xorurl_encoder {
+    let url_path = if let Some(nrs_url) = nrs_safeurl {
         nrs_url.path().to_string()
     } else {
-        xorurl_encoder.path().to_string()
+        safeurl.path().to_string()
     };
 
     let (wallet_balance, _) = if url_path.is_empty() {
@@ -521,8 +498,8 @@ async fn resolve_wallet_url(
         // Get the spendable balance which name matches the path we found in the URL
         wallet_get_spendable_balance(
             safe,
-            xorurl_encoder.xorname(),
-            xorurl_encoder.type_tag(),
+            safeurl.xorname(),
+            safeurl.type_tag(),
             url_path[1..].as_bytes(), // we get rid of starting '/' from the URL path
         )
         .await
@@ -541,23 +518,27 @@ async fn resolve_wallet_url(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::{
-        app::{
-            helpers::pk_to_hex,
-            test_helpers::{new_safe_instance, random_nrs_name},
+    use crate::{
+        api::{
+            app::{
+                helpers::pk_to_hex,
+                test_helpers::{new_read_only_safe_instance, new_safe_instance, random_nrs_name},
+            },
+            common::sk_to_hex,
         },
-        common::sk_to_hex,
+        retry_loop, retry_loop_for_pattern,
     };
     use anyhow::{anyhow, bail, Result};
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_wallet_create() -> Result<()> {
         let mut safe = new_safe_instance().await?;
         let xorurl = safe.wallet_create().await?;
         assert!(xorurl.starts_with("safe://"));
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
         let current_balance = safe.wallet_balance(&xorurl).await?;
         assert_eq!("0.000000000", current_balance);
+
         Ok(())
     }
 
@@ -569,16 +550,18 @@ mod tests {
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
         let (_, keypair2) = safe.keys_create_preload_test_coins("1.53").await?;
         let sk2_hex = sk_to_hex(keypair2.secret_key()?);
+
+        let _ = retry_loop!(safe.fetch(&wallet_xorurl, None));
         safe.wallet_insert(&wallet_xorurl, Some("my-first-balance"), true, &sk1_hex)
             .await?;
 
-        let current_balance = safe.wallet_balance(&wallet_xorurl).await?;
-        assert_eq!("12.230000000", current_balance);
+        let _ = retry_loop_for_pattern!(safe.wallet_balance(&wallet_xorurl), Ok(balance) if balance == "12.230000000")?;
 
         safe.wallet_insert(&wallet_xorurl, Some("my-second-balance"), false, &sk2_hex)
             .await?;
-        let current_balance = safe.wallet_balance(&wallet_xorurl).await?;
-        assert_eq!("13.760000000" /*== 12.23 + 1.53*/, current_balance);
+
+        let _ = retry_loop_for_pattern!(safe.wallet_balance(&wallet_xorurl), Ok(balance) if balance == "13.760000000" /*== 12.23 + 1.53*/)?;
+
         Ok(())
     }
 
@@ -590,6 +573,7 @@ mod tests {
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
         let (key2_xorurl, keypair2) = safe.keys_create_preload_test_coins("1.53").await?;
         let sk2_hex = sk_to_hex(keypair2.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&wallet_xorurl, None));
 
         safe.wallet_insert(&wallet_xorurl, Some("my-first-balance"), true, &sk1_hex)
             .await?;
@@ -597,7 +581,7 @@ mod tests {
         safe.wallet_insert(&wallet_xorurl, Some("my-second-balance"), false, &sk2_hex)
             .await?;
 
-        let wallet_balances = safe.wallet_get(&wallet_xorurl).await?;
+        let wallet_balances = retry_loop_for_pattern!(safe.wallet_get(&wallet_xorurl), Ok(balances) if balances.len() == 2)?;
         assert_eq!(wallet_balances["my-first-balance"].0, true);
         assert_eq!(wallet_balances["my-first-balance"].1.xorurl, key1_xorurl);
         assert_eq!(
@@ -611,10 +595,12 @@ mod tests {
             wallet_balances["my-second-balance"].1.sk,
             sk_to_hex(keypair2.secret_key()?)
         );
+
         Ok(())
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_wallet_insert_and_set_default() -> Result<()> {
         let mut safe = new_safe_instance().await?;
         let wallet_xorurl = safe.wallet_create().await?;
@@ -623,10 +609,18 @@ mod tests {
         let (key2_xorurl, keypair2) = safe.keys_create_preload_test_coins("11.44").await?;
         let sk2_hex = sk_to_hex(keypair2.secret_key()?);
 
+        let _ = retry_loop!(safe.fetch(&key1_xorurl, None));
+        let _ = retry_loop!(safe.fetch(&key2_xorurl, None));
+        let _ = retry_loop!(safe.fetch(&wallet_xorurl, None));
+
         safe.wallet_insert(&wallet_xorurl, Some("my-first-balance"), true, &sk1_hex)
             .await?;
+        let _ = retry_loop_for_pattern!(safe.wallet_get(&wallet_xorurl), Ok(balances) if balances.len() == 1)?;
+
         safe.wallet_insert(&wallet_xorurl, Some("my-second-balance"), true, &sk2_hex)
             .await?;
+
+        let _ = retry_loop_for_pattern!(safe.wallet_get(&wallet_xorurl), Ok(balances) if balances.len() == 2)?;
 
         let wallet_balances = safe.wallet_get(&wallet_xorurl).await?;
         assert_eq!(wallet_balances["my-first-balance"].0, false);
@@ -642,6 +636,7 @@ mod tests {
             wallet_balances["my-second-balance"].1.sk,
             sk_to_hex(keypair2.secret_key()?)
         );
+
         Ok(())
     }
 
@@ -653,6 +648,10 @@ mod tests {
         let to_wallet_xorurl = safe.wallet_create().await?; // we'll insert a default balance
         let (_, keypair) = safe.keys_create_preload_test_coins("43523").await?;
         let sk_hex = sk_to_hex(keypair.secret_key()?);
+
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
+        let _ = retry_loop!(safe.fetch(&to_wallet_xorurl, None));
+
         safe.wallet_insert(
             &to_wallet_xorurl,
             Some("my-first-balance"),
@@ -703,6 +702,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_, keypair1) = safe.keys_create_preload_test_coins("0.0").await?;
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("my-first-balance"),
@@ -718,7 +718,7 @@ mod tests {
             .wallet_transfer("0", &from_wallet_xorurl, &to_key_xorurl)
             .await
         {
-            Err(Error::NetDataError(msg)) => {
+            Err(Error::InvalidAmount(msg)) => {
                 assert!(msg.contains("Cannot send zero-value transfers"))
             }
             Err(err) => bail!("Error returned is not the expected: {:?}", err),
@@ -741,7 +741,7 @@ mod tests {
             .wallet_transfer("0", &from_wallet_xorurl, &to_wallet_xorurl)
             .await
         {
-            Err(Error::NetDataError(msg)) => {
+            Err(Error::InvalidAmount(msg)) => {
                 assert!(msg.contains("Cannot send zero-value transfers"));
                 Ok(())
             }
@@ -756,6 +756,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_, keypair1) = safe.keys_create_preload_test_coins("100.5").await?;
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("my-first-balance"),
@@ -798,7 +799,7 @@ mod tests {
         {
             Err(Error::InvalidAmount(msg)) => assert_eq!(
                 msg,
-                "Invalid safecoins amount '.06' (Can\'t parse Money units)"
+                "Invalid safecoins amount '.06' (Can\'t parse token units)"
             ),
             Err(err) => bail!("Error returned is not the expected: {:?}", err),
             Ok(_) => bail!("Transfer succeeded unexpectedly".to_string()),
@@ -826,6 +827,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_, keypair2) = safe.keys_create_preload_test_coins("4621.45").await?;
         let sk2_hex = sk_to_hex(keypair2.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("my-first-balance"),
@@ -848,9 +850,8 @@ mod tests {
                     "4097.580000000", /* 4621.45 - 523.87 */
                     from_current_balance
                 );
-                let key_current_balance = safe
-                    .keys_balance_from_sk(Arc::new(keypair3.secret_key()?))
-                    .await?;
+                let key_current_balance =
+                    safe.keys_balance_from_sk(&keypair3.secret_key()?).await?;
                 assert_eq!("533.870000000", key_current_balance);
                 Ok(())
             }
@@ -863,6 +864,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_, keypair1) = safe.keys_create_preload_test_coins("1122.98").await?;
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("my-first-balance"),
@@ -886,9 +888,8 @@ mod tests {
                     "565.060000000", /* 1122.98 - 557.92 */
                     from_current_balance
                 );
-                let key_current_balance = safe
-                    .keys_balance_from_sk(Arc::new(keypair2.secret_key()?))
-                    .await?;
+                let key_current_balance =
+                    safe.keys_balance_from_sk(&keypair2.secret_key()?).await?;
                 assert_eq!(
                     "3789.920000000", /* 3232 + 557.92 */
                     key_current_balance
@@ -928,6 +929,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_, keypair1) = safe.keys_create_preload_test_coins("0.2").await?;
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("my-first-balance"),
@@ -936,37 +938,32 @@ mod tests {
         )
         .await?;
 
-        let from_wallet_xorurl = safe.wallet_create().await?;
-        let (_, keypair2) = safe.keys_create_preload_test_coins("0.2").await?;
-        let sk2_hex = sk_to_hex(keypair2.secret_key()?);
-        safe.wallet_insert(
-            &from_wallet_xorurl,
-            Some("my-first-balance"),
-            true, // set --default
-            &sk2_hex,
-        )
-        .await?;
-
-        let from_nrsurl = random_nrs_name();
-        let _ = safe
-            .nrs_map_container_create(&from_nrsurl, &from_wallet_xorurl, false, true, false)
+        let from_nrs_name = random_nrs_name();
+        let (xorurl, _, _) = safe
+            .nrs_map_container_create(&from_nrs_name, &from_wallet_xorurl, false, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let (key_xorurl, keypair3) = safe.keys_create_preload_test_coins("0.1").await?;
-        let to_nrsurl = random_nrs_name();
-        let _ = safe
-            .nrs_map_container_create(&to_nrsurl, &key_xorurl, false, true, false)
+        let to_nrs_name = random_nrs_name();
+        let (xorurl, _, _) = safe
+            .nrs_map_container_create(&to_nrs_name, &key_xorurl, false, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         // test successful transfer
-        match safe.wallet_transfer("0.2", &from_nrsurl, &to_nrsurl).await {
+        let from_nrs_url = format!("safe://{}", from_nrs_name);
+        let to_nrs_url = format!("safe://{}", to_nrs_name);
+        match safe
+            .wallet_transfer("0.2", &from_nrs_url, &to_nrs_url)
+            .await
+        {
             Err(msg) => Err(anyhow!("Transfer was expected to succeed: {}", msg)),
             Ok(_) => {
-                let from_current_balance = safe.wallet_balance(&from_nrsurl).await?;
+                let from_current_balance = safe.wallet_balance(&from_nrs_url).await?;
                 assert_eq!("0.000000000" /* 0.2 - 0.2 */, from_current_balance);
-                let key_current_balance = safe
-                    .keys_balance_from_sk(Arc::new(keypair3.secret_key()?))
-                    .await?;
+                let key_current_balance =
+                    safe.keys_balance_from_sk(&keypair3.secret_key()?).await?;
                 assert_eq!("0.300000000" /* 0.1 + 0.2 */, key_current_balance);
                 Ok(())
             }
@@ -979,6 +976,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_key_xorurl1, keypair1) = safe.keys_create_preload_test_coins("100.5").await?;
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("from-first-balance"),
@@ -1000,6 +998,7 @@ mod tests {
         let to_wallet_xorurl = safe.wallet_create().await?;
         let (_key_xorurl3, keypair3) = safe.keys_create_preload_test_coins("10.5").await?;
         let sk3_hex = sk_to_hex(keypair3.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&to_wallet_xorurl, None));
         safe.wallet_insert(
             &to_wallet_xorurl,
             Some("to-first-balance"),
@@ -1009,7 +1008,7 @@ mod tests {
         .await?;
 
         // test fail to transfer more than current balance at 'from-firstbaance'
-        let mut from_wallet_spendable_balance = XorUrlEncoder::from_url(&from_wallet_xorurl)?;
+        let mut from_wallet_spendable_balance = SafeUrl::from_url(&from_wallet_xorurl)?;
         from_wallet_spendable_balance.set_path("from-second-balance");
         let from_spendable_balance = from_wallet_spendable_balance.to_string();
         match safe
@@ -1059,6 +1058,7 @@ mod tests {
         let from_wallet_xorurl = safe.wallet_create().await?;
         let (_key_xorurl1, keypair1) = safe.keys_create_preload_test_coins("100.7").await?;
         let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
         safe.wallet_insert(
             &from_wallet_xorurl,
             Some("from-first-balance"),
@@ -1070,6 +1070,7 @@ mod tests {
         let to_wallet_xorurl = safe.wallet_create().await?;
         let (_key_xorurl2, keypair2) = safe.keys_create_preload_test_coins("10.2").await?;
         let sk2_hex = sk_to_hex(keypair2.secret_key()?);
+        let _ = retry_loop!(safe.fetch(&to_wallet_xorurl, None));
         safe.wallet_insert(
             &to_wallet_xorurl,
             Some("to-first-balance"),
@@ -1089,7 +1090,7 @@ mod tests {
         .await?;
 
         // test successful transfer to 'to-second-balance'
-        let mut to_wallet_spendable_balance = XorUrlEncoder::from_url(&to_wallet_xorurl)?;
+        let mut to_wallet_spendable_balance = SafeUrl::from_url(&to_wallet_xorurl)?;
         to_wallet_spendable_balance.set_path("to-second-balance");
         let to_spendable_balance = to_wallet_spendable_balance.to_string();
         match safe
@@ -1116,9 +1117,10 @@ mod tests {
 
         // let's also test checking the balance with NRS URL of the destination spendable balances
         let to_wallet_nrsurl = random_nrs_name();
-        let _ = safe
+        let (xorurl, _, _) = safe
             .nrs_map_container_create(&to_wallet_nrsurl, &to_wallet_xorurl, false, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         let to_first_current_balance = safe
             .wallet_balance(&format!("{}/to-first-balance", to_wallet_nrsurl))
@@ -1128,6 +1130,7 @@ mod tests {
             .wallet_balance(&format!("{}/to-second-balance", to_wallet_nrsurl))
             .await?;
         assert_eq!("120.700000000", to_second_current_balance);
+
         Ok(())
     }
 
@@ -1138,6 +1141,8 @@ mod tests {
             let from_wallet_xorurl = safe.wallet_create().await?;
             let (_, keypair1) = safe.keys_create_preload_test_coins("10.1").await?;
             let sk1_hex = sk_to_hex(keypair1.secret_key()?);
+            let _ = retry_loop!(safe.fetch(&from_wallet_xorurl, None));
+
             safe.wallet_insert(
                 &from_wallet_xorurl,
                 Some("from-first-balance"),
@@ -1162,6 +1167,7 @@ mod tests {
             let to_wallet_xorurl = safe.wallet_create().await?;
             let (_, keypair3) = safe.keys_create_preload_test_coins("30.3").await?;
             let sk3_hex = sk_to_hex(keypair3.secret_key()?);
+            let _ = retry_loop!(safe.fetch(&to_wallet_xorurl, None));
             safe.wallet_insert(
                 &to_wallet_xorurl,
                 Some("to-first-balance"),
@@ -1183,18 +1189,23 @@ mod tests {
         };
 
         // create NRS URLs for both wallets
-        let from_nrsurl = random_nrs_name();
-        let _ = safe
-            .nrs_map_container_create(&from_nrsurl, &from_wallet_xorurl, false, true, false)
+        let from_nrs_name = random_nrs_name();
+        let (xorurl, _, _) = safe
+            .nrs_map_container_create(&from_nrs_name, &from_wallet_xorurl, false, true, false)
             .await?;
-        let to_nrsurl = random_nrs_name();
-        let _ = safe
-            .nrs_map_container_create(&to_nrsurl, &to_wallet_xorurl, false, true, false)
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
+
+        let to_nrs_name = random_nrs_name();
+        let (xorurl, _, _) = safe
+            .nrs_map_container_create(&to_nrs_name, &to_wallet_xorurl, false, true, false)
             .await?;
+        let _ = retry_loop!(safe.fetch(&xorurl, None));
 
         // test successful transfer from 'from-second-balance' to 'to-second-balance'
-        let from_spendable_balance = format!("{}/from-second-balance", from_nrsurl);
-        let to_spendable_balance = format!("{}/to-second-balance", to_nrsurl);
+        let from_nrs_url = format!("safe://{}", from_nrs_name);
+        let to_nrs_url = format!("safe://{}", to_nrs_name);
+        let from_spendable_balance = format!("{}/from-second-balance", from_nrs_url);
+        let to_spendable_balance = format!("{}/to-second-balance", to_nrs_url);
         match safe
             .wallet_transfer("5.8", &from_spendable_balance, &to_spendable_balance)
             .await
@@ -1242,6 +1253,10 @@ mod tests {
         let source_wallet_xorurl = safe.wallet_create().await?;
         let (key_xorurl, keypair) = safe.keys_create_preload_test_coins("100.5").await?;
         let sk_hex = sk_to_hex(keypair.secret_key()?);
+
+        let _ = retry_loop!(safe.fetch(&key_xorurl, None));
+        let _ = retry_loop!(safe.fetch(&source_wallet_xorurl, None));
+
         safe.wallet_insert(
             &source_wallet_xorurl,
             Some("my-first-balance"),
@@ -1250,11 +1265,12 @@ mod tests {
         )
         .await?;
 
-        let mut another_safe = Safe::default();
-        another_safe.connect(None).await?;
+        let _ = retry_loop_for_pattern!(safe.wallet_get(&source_wallet_xorurl), Ok(balances) if balances.len() == 1)?;
+
+        let mut read_only_safe = new_read_only_safe_instance().await?;
 
         // test fail to transfer from a not owned wallet in <from> argument
-        match another_safe
+        match read_only_safe
             .wallet_transfer("0.2", &source_wallet_xorurl, &key_xorurl)
             .await
         {

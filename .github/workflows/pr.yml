@@ -1,6 +1,6 @@
 name: PR
 
-on: [pull_request, push]
+on: pull_request
 
 env:
   # Run all cargo commands with --verbose.
@@ -10,12 +10,33 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  clippy:
-    if: ${{ github.repository_owner == 'maidsafe' }}
-    name: Clippy, fmt & code coverage checks
+  cargo-udeps:
+    name: Unused dependency check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      # Install Rust and required components
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      # Install and run cargo udeps to find unused cargo dependencies
+      - name: cargo-udeps unused dependency check
+        run: |
+          cargo install cargo-udeps --locked
+          cargo +nightly udeps --all-targets
+
+  clippy:
+    if: ${{ github.repository_owner == 'maidsafe' }}
+    name: Clippy & fmt
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v2
       - name: Install Rust and required components
         uses: actions-rs/toolchain@v1
         with:
@@ -24,13 +45,9 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      # Check if the code is formatted correctly.
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
       # Cache.
-      - name: Cargo cache
-        uses: actions/cache@v2
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2.1.4
         with:
           path: |
             ~/.cargo/registry
@@ -38,9 +55,24 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-cache-${{ hashFiles('**/Cargo.lock') }}
 
+      # Check if the code is formatted correctly.
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
       # Run Clippy.
       - name: Clippy checks
         run: cargo clippy --all-targets --all-features
+
+  check_pr_size:
+    name: Check PR size doesn't break set limit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: '0'
+      - uses: maidsafe/pr_size_checker@v2
+        with:
+          max_lines_changed: 200
 
   coverage:
     # if: ${{ github.repository_owner == 'maidsafe' }}
@@ -48,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     if: false
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust and required components
         uses: actions-rs/toolchain@v1
         with:
@@ -57,8 +89,8 @@ jobs:
           override: true
 
       # Cache.
-      - name: Cargo cache
-        uses: actions/cache@v2
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2.1.4
         with:
           path: |
             ~/.cargo/registry
@@ -68,9 +100,9 @@ jobs:
 
       # Run cargo tarpaulin
       - name: Code Coverage - sn_api
-        uses: actions-rs/tarpaulin@master
+        uses: actions-rs/tarpaulin@v0.1
         with:
-          args: '-v --manifest-path=sn_api/Cargo.toml --exclude-files=sn_cli/*,qjsonrpc/*,sn_authd/* --out Lcov -- --test-threads=1'
+          args: '-v --manifest-path=sn_api/Cargo.toml --release --exclude-files=sn_cli/*,qjsonrpc/*,sn_authd/* --out Lcov -- --test-threads=1'
 
       # Push tarpaulin results to coveralls.io
       - name: Coveralls
@@ -79,6 +111,17 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: ./lcov.info
 
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    # wget the shared deny.toml file from the QA repo
+    - shell: bash
+      run: wget https://raw.githubusercontent.com/maidsafe/QA/master/misc-scripts/deny.toml
+
+    - uses: EmbarkStudios/cargo-deny-action@v1
+  
   test-component:
     # if: ${{ github.repository_owner == 'maidsafe' }} // re-enable this once these tests are run again
     if: false
@@ -96,7 +139,7 @@ jobs:
         shell: bash
         run: git config --global --add core.symlinks true
 
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -105,8 +148,8 @@ jobs:
           override: true
 
       # Cache.
-      - name: Cargo cache
-        uses: actions/cache@v2
+      - name: Cargo cache registry, index and build
+        uses: actions/cache@v2.1.4
         with:
           path: |
             ~/.cargo/registry

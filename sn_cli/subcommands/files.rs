@@ -16,17 +16,20 @@ use super::{
     OutputFmt,
 };
 use ansi_term::Colour;
+use anyhow::{bail, Context, Result};
 use log::debug;
 use prettytable::{format::FormatBuilder, Table};
 use serde::Serialize;
 use sn_api::{
     fetch::SafeData,
     files::{FilesMap, ProcessedFiles},
-    xorurl::{XorUrl, XorUrlEncoder},
+    safeurl::{SafeUrl, XorUrl},
     Safe,
 };
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Component, Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::{Component, Path},
+};
 use structopt::StructOpt;
 
 type FileDetails = BTreeMap<String, String>;
@@ -57,7 +60,6 @@ struct FileTreeNode {
     details: FileDetails,
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    //    #[allow(clippy::vec_box)]
     sub: Vec<FileTreeNode>,
 }
 
@@ -202,7 +204,7 @@ pub async fn files_commander(
     output_fmt: OutputFmt,
     dry_run: bool,
     safe: &mut Safe,
-) -> Result<(), String> {
+) -> Result<()> {
     match cmd {
         FilesSubCommands::Put {
             location,
@@ -242,7 +244,7 @@ pub async fn files_commander(
                 }
                 table.printstd();
             } else {
-                print_serialized_output(files_container_xorurl, 0, processed_files, output_fmt)?;
+                print_serialized_output(files_container_xorurl, 0, processed_files, output_fmt);
             }
 
             Ok(())
@@ -276,11 +278,11 @@ pub async fn files_commander(
             if OutputFmt::Pretty == output_fmt {
                 let (table, success_count) = gen_processed_files_table(&processed_files, true);
                 if success_count > 0 {
-                    let url = match XorUrlEncoder::from_url(&target) {
-                        Ok(mut xorurl_encoder) => {
-                            xorurl_encoder.set_content_version(Some(version));
-                            xorurl_encoder.set_path("");
-                            xorurl_encoder.to_string()
+                    let url = match SafeUrl::from_url(&target) {
+                        Ok(mut safeurl) => {
+                            safeurl.set_content_version(Some(version));
+                            safeurl.set_path("");
+                            safeurl.to_string()
                         }
                         Err(_) => target,
                     };
@@ -300,7 +302,7 @@ pub async fn files_commander(
                     println!("No changes were required, source location is already in sync with FilesContainer (version {}) at: \"{}\"", version, target);
                 }
             } else {
-                print_serialized_output(target, version, processed_files, output_fmt)?;
+                print_serialized_output(target, version, processed_files, output_fmt);
             }
             Ok(())
         }
@@ -314,7 +316,7 @@ pub async fn files_commander(
             // Validate that location and target are not both "", ie stdin.
             let target_url = target.unwrap_or_else(|| "".to_string());
             if target_url.is_empty() && location.is_empty() {
-                return Err("Cannot read both <location> and <target> from stdin.".to_string());
+                bail!("Cannot read both <location> and <target> from stdin");
             }
 
             let target_url =
@@ -336,7 +338,7 @@ pub async fn files_commander(
                 };
 
             // Now let's just print out a list of the files synced/processed
-            output_processed_files_list(output_fmt, processed_files, version, target_url)?;
+            output_processed_files_list(output_fmt, processed_files, version, target_url);
             Ok(())
         }
         FilesSubCommands::Rm {
@@ -357,7 +359,7 @@ pub async fn files_commander(
                 .await?;
 
             // Now let's just print out a list of the files removed
-            output_processed_files_list(output_fmt, processed_files, version, target_url)?;
+            output_processed_files_list(output_fmt, processed_files, version, target_url);
             Ok(())
         }
         FilesSubCommands::Ls { target } => {
@@ -368,7 +370,7 @@ pub async fn files_commander(
             let mut resolution_chain = safe.inspect(&target_url).await?;
             let resolved_content = resolution_chain
                 .pop()
-                .ok_or_else(|| "Unexpectedly failed to obtain the resolved content".to_string())?;
+                .context("Unexpectedly failed to obtain the resolved content")?;
 
             let (version, files_map, total) = match resolved_content {
                 SafeData::FilesContainer {
@@ -388,23 +390,17 @@ pub async fn files_commander(
 
                         let container_version = match resolution_chain.pop() {
                             Some(SafeData::FilesContainer { version, .. }) => version,
-                            _ => {
-                                return Err("Unexpectedly failed to obtain the container's version"
-                                    .to_string())
-                            }
+                            _ => bail!("Unexpectedly failed to obtain the container's version"),
                         };
 
                         (container_version, files_map, 1)
                     } else {
-                        return Err(
-                            "You can target files only by providing a FilesContainer with the file's path."
-                                .to_string(),
+                        bail!(
+                            "You can target files only by providing a FilesContainer with the file's path"
                         );
                     }
                 }
-                _other_type => {
-                    return Err("Make sure the URL targets a FilesContainer.".to_string())
-                }
+                _other_type => bail!("Make sure the URL targets a FilesContainer"),
             };
 
             if OutputFmt::Pretty == output_fmt {
@@ -434,13 +430,13 @@ async fn process_tree_command(
     target: Option<XorUrl>,
     details: bool,
     output_fmt: OutputFmt,
-) -> Result<(), String> {
+) -> Result<()> {
     let target_url = get_from_arg_or_stdin(target, Some("...awaiting target URl from STDIN"))?;
 
     debug!("Getting files in container {:?}", target_url);
     let files_map = match safe.fetch(&target_url, None).await? {
         SafeData::FilesContainer { files_map, .. } => files_map,
-        _other_type => return Err("Make sure the URL targets a FilesContainer.".to_string()),
+        _other_type => bail!("Make sure the URL targets a FilesContainer"),
     };
 
     // Create a top/root node representing `target_url`.
@@ -482,34 +478,31 @@ fn print_serialized_output(
     version: u64,
     processed_files: BTreeMap<String, (String, String)>,
     output_fmt: OutputFmt,
-) -> Result<(), String> {
-    let url = match XorUrlEncoder::from_url(&xorurl) {
-        Ok(mut xorurl_encoder) => {
-            xorurl_encoder.set_content_version(Some(version));
-            xorurl_encoder.to_string()
+) {
+    let url = match SafeUrl::from_url(&xorurl) {
+        Ok(mut safeurl) => {
+            safeurl.set_content_version(Some(version));
+            safeurl.to_string()
         }
         Err(_) => xorurl,
     };
     println!("{}", serialise_output(&(url, processed_files), output_fmt));
-
-    Ok(())
 }
 
 fn output_processed_files_list(
     output_fmt: OutputFmt,
     processed_files: ProcessedFiles,
-
     version: u64,
     target_url: String,
-) -> Result<(), String> {
+) {
     if OutputFmt::Pretty == output_fmt {
         let (table, success_count) = gen_processed_files_table(&processed_files, true);
         if success_count > 0 {
-            let url = match XorUrlEncoder::from_url(&target_url) {
-                Ok(mut xorurl_encoder) => {
-                    xorurl_encoder.set_content_version(Some(version));
-                    xorurl_encoder.set_path("");
-                    xorurl_encoder.to_string()
+            let url = match SafeUrl::from_url(&target_url) {
+                Ok(mut safeurl) => {
+                    safeurl.set_content_version(Some(version));
+                    safeurl.set_path("");
+                    safeurl.to_string()
                 }
                 Err(_) => target_url,
             };
@@ -529,10 +522,8 @@ fn output_processed_files_list(
             );
         }
     } else {
-        print_serialized_output(target_url, version, processed_files, output_fmt)?;
+        print_serialized_output(target_url, version, processed_files, output_fmt);
     }
-
-    Ok(())
 }
 
 // Builds a file-system tree (hierarchy) from a single file path, split into its parts.
@@ -779,9 +770,9 @@ fn print_files_map(files_map: &FilesMap, total_files: u64, version: u64, target_
     table.printstd();
 }
 
-fn filter_files_map(files_map: &FilesMap, target_url: &str) -> Result<(u64, FilesMap), String> {
+fn filter_files_map(files_map: &FilesMap, target_url: &str) -> Result<(u64, FilesMap)> {
     let mut filtered_filesmap = FilesMap::default();
-    let mut xorurl_encoder = Safe::parse_url(target_url)?;
+    let mut safeurl = Safe::parse_url(target_url)?;
     let mut total = 0;
 
     for (filepath, fileitem) in files_map.iter() {
@@ -804,7 +795,7 @@ fn filter_files_map(files_map: &FilesMap, target_url: &str) -> Result<(u64, File
             if let Component::Normal(comp) = p {
                 match comp.to_str() {
                     Some(c) => subdirs.push(c),
-                    None => return Err("Encountered invalid unicode sequence in path".to_string()),
+                    None => bail!("Encountered invalid unicode sequence in path".to_string()),
                 };
             } else {
                 continue;
@@ -829,8 +820,8 @@ fn filter_files_map(files_map: &FilesMap, target_url: &str) -> Result<(u64, File
                     let mut fileitem = fileitem.clone();
                     if is_folder {
                         // then set link to xorurl with path current subfolder
-                        xorurl_encoder.set_path(&subdirs[0]);
-                        let link = xorurl_encoder.to_string();
+                        safeurl.set_path(&subdirs[0]);
+                        let link = safeurl.to_string();
                         fileitem.insert("link".to_string(), link);
                         fileitem.insert("type".to_string(), "".to_string());
                     }

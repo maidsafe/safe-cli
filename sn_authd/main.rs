@@ -16,11 +16,10 @@ mod shared;
 mod update;
 
 use errors::{Error, Result};
-use log::debug;
-use log::error;
-use std::path::PathBuf;
-use std::process;
-use structopt::{self, StructOpt};
+use flexi_logger::Logger;
+use log::{debug, error};
+use std::{path::PathBuf, process};
+use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
 use update::update_commander;
 
 #[macro_use]
@@ -30,7 +29,7 @@ use operations::{restart_authd, start_authd, stop_authd};
 
 #[derive(StructOpt, Debug)]
 /// SAFE Authenticator daemon subcommands
-#[structopt(raw(global_settings = "&[structopt::clap::AppSettings::ColoredHelp]"))]
+#[structopt(global_settings(&[ColoredHelp]))]
 enum CmdArgs {
     /// Start the sn_authd daemon
     #[structopt(name = "start")]
@@ -84,6 +83,11 @@ enum CmdArgs {
 
 #[tokio::main]
 async fn main() {
+    if let Err(err) = Logger::with_env().start() {
+        error!("sn_authd error: {}", err);
+        process::exit(1);
+    }
+
     setup_panic!();
 
     // Let's first get all the arguments passed in

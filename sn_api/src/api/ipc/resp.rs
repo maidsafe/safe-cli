@@ -6,16 +6,11 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#![allow(unsafe_code)]
-
 use super::{BootstrapConfig, IpcError};
-
 use serde::{Deserialize, Serialize};
 use sn_data_types::Keypair;
-use std::sync::Arc;
 
 /// IPC response.
-// TODO: `TransOwnership` variant
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IpcResp {
@@ -29,9 +24,9 @@ pub enum IpcResp {
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct AuthGranted {
     /// The access keys.
-    pub app_keypair: Arc<Keypair>,
+    pub app_keypair: Keypair,
 
     /// Network bootstrap information.
     /// Useful to reuse bootstrap nodes and speed up access.
-    pub bootstrap_config: BootstrapConfig,
+    pub bootstrap_config: Option<BootstrapConfig>,
 }

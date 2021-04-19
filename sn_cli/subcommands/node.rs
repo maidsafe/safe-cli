@@ -7,12 +7,13 @@
 // specific language governing permissions and limitations relating to use of the SAFE Network
 // Software.
 
-use crate::operations::config::{
-    read_config_settings, read_current_network_conn_info, retrieve_conn_info,
+use crate::operations::{
+    config::{read_current_network_conn_info, Config},
+    node::*,
 };
-use crate::operations::node::*;
+use anyhow::{anyhow, Result};
 use log::debug;
-use std::path::PathBuf;
+use std::{collections::HashSet, iter::FromIterator, net::SocketAddr, path::PathBuf};
 use structopt::StructOpt;
 
 const NODES_DATA_FOLDER: &str = "baby-fleming-nodes";
@@ -21,6 +22,11 @@ const LOCAL_NODE_DIR: &str = "local-node";
 
 #[derive(StructOpt, Debug)]
 pub enum NodeSubCommands {
+    /// Gets the version of `sn_node` binary
+    BinVersion {
+        #[structopt(long = "node_path", env = "SN_NODE_PATH")]
+        node_path: Option<PathBuf>,
+    },
     #[structopt(name = "install")]
     /// Install latest sn_node released version in the system
     Install {
@@ -43,7 +49,7 @@ pub enum NodeSubCommands {
         verbosity: u8,
         /// Hardcoded contacts (endpoints) to be used to bootstrap to an already running network (this overrides any value passed as 'network_name').
         #[structopt(short = "h", long = "hcc")]
-        hard_coded_contacts: Option<String>,
+        hard_coded_contacts: Vec<SocketAddr>,
     },
     #[structopt(name = "run-baby-fleming")]
     /// Run nodes to form a local single-section Safe network
@@ -58,7 +64,7 @@ pub enum NodeSubCommands {
         #[structopt(short = "i", long, default_value = "1")]
         interval: u64,
         /// Number of nodes to be launched
-        #[structopt(short = "n", long = "nodes", default_value = "11")]
+        #[structopt(long = "nodes", default_value = "11")]
         num_of_nodes: u8,
         /// IP to be used to launch the local nodes.
         #[structopt(long = "ip")]
@@ -84,15 +90,16 @@ pub enum NodeSubCommands {
     },
 }
 
-pub fn node_commander(cmd: Option<NodeSubCommands>) -> Result<(), String> {
+pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
     match cmd {
+        Some(NodeSubCommands::BinVersion { node_path }) => node_version(node_path),
         Some(NodeSubCommands::Install { node_path }) => {
             // We run this command in a separate thread to overcome a conflict with
             // the self_update crate as it seems to be creating its own runtime.
             let handler = std::thread::spawn(|| node_install(node_path));
             handler
                 .join()
-                .map_err(|err| format!("Failed to run self update: {:?}", err))?
+                .map_err(|err| anyhow!("Failed to run self update: {:?}", err))?
         }
         Some(NodeSubCommands::Join {
             network_name,
@@ -100,46 +107,26 @@ pub fn node_commander(cmd: Option<NodeSubCommands>) -> Result<(), String> {
             verbosity,
             hard_coded_contacts,
         }) => {
-            let network_contacts: Result<String, String> = if let Some(contacts) =
-                hard_coded_contacts
-            {
-                let msg = format!("Joining network with contacts {}...", contacts);
-                debug!("{}", msg);
-                println!("{}", msg);
-                Ok(contacts)
-            } else {
-                let contacts = if let Some(name) = network_name {
-                    let (settings, _) = read_config_settings()?;
+            let network_contacts = if hard_coded_contacts.is_empty() {
+                if let Some(name) = network_name {
+                    let config = Config::read()?;
                     let msg = format!("Joining the '{}' network...", name);
                     debug!("{}", msg);
                     println!("{}", msg);
-                    match settings.networks.get(&name) {
-                        Some(config_location) => retrieve_conn_info(&name, config_location),
-                        None => Err(format!("No network with name '{}' was found in the config. Please use the 'networks add' command to add it", name))
-                    }
+                    config.get_network_info(&name).await?
                 } else {
                     let (_, contacts) = read_current_network_conn_info()?;
-                    Ok(contacts)
-                }?;
-
-                let mut contacts_str = std::str::from_utf8(&contacts)
-                    .map_err(|err| {
-                        format!(
-                            "Failed to parse network contact information from the config: {}",
-                            err
-                        )
-                    })?
-                    .to_string();
-
-                contacts_str = contacts_str.replace("\"", "");
-                let len_withoutcrlf = contacts_str.trim_end().len();
-                contacts_str.truncate(len_withoutcrlf);
-                debug!("Joining network with contacts {}...", contacts_str);
-
-                Ok(contacts_str)
+                    contacts
+                }
+            } else {
+                HashSet::from_iter(hard_coded_contacts)
             };
 
-            node_join(node_path, LOCAL_NODE_DIR, verbosity, &network_contacts?)
+            let msg = format!("Joining network with contacts {:?} ...", network_contacts);
+            debug!("{}", msg);
+            println!("{}", msg);
+
+            node_join(node_path, LOCAL_NODE_DIR, verbosity, &network_contacts)
         }
         Some(NodeSubCommands::Run {
             node_path,
@@ -159,6 +146,6 @@ pub fn node_commander(cmd: Option<NodeSubCommands>) -> Result<(), String> {
         ),
         Some(NodeSubCommands::Killall { node_path }) => node_shutdown(node_path),
         Some(NodeSubCommands::Update { node_path }) => node_update(node_path),
-        None => Err("Missing note subcommand".to_string()),
+        None => Err(anyhow!("Missing node subcommand")),
     }
 }

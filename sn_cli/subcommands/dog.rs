@@ -11,10 +11,11 @@ use super::{
     helpers::{get_from_arg_or_stdin, print_nrs_map, serialise_output, xorname_to_hex},
     OutputFmt,
 };
+use anyhow::Result;
 use log::debug;
 use sn_api::{
     fetch::{SafeContentType, SafeData},
-    xorurl::XorUrlEncoder,
+    safeurl::SafeUrl,
     Safe,
 };
 use structopt::StructOpt;
@@ -25,11 +26,7 @@ pub struct DogCommands {
     location: Option<String>,
 }
 
-pub async fn dog_commander(
-    cmd: DogCommands,
-    output_fmt: OutputFmt,
-    safe: &mut Safe,
-) -> Result<(), String> {
+pub async fn dog_commander(cmd: DogCommands, output_fmt: OutputFmt, safe: &mut Safe) -> Result<()> {
     let url = get_from_arg_or_stdin(cmd.location, None)?;
     debug!("Running dog for: {:?}", &url);
 
@@ -62,9 +59,9 @@ pub async fn dog_commander(
                     println!("Type tag: {}", type_tag);
                     println!("XOR name: 0x{}", xorname_to_hex(xorname));
                     println!("Native data type: {}", data_type);
-                    let mut xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
-                    xorurl_encoder.set_content_type(SafeContentType::Raw)?;
-                    println!("Native data XOR-URL: {}", xorurl_encoder.to_string());
+                    let mut safeurl = SafeUrl::from_url(xorurl)?;
+                    safeurl.set_content_type(SafeContentType::Raw)?;
+                    println!("Native data XOR-URL: {}", safeurl.to_string());
                     print_nrs_map(&nrs_map, &public_name);
                 }
                 SafeData::FilesContainer {
@@ -83,9 +80,9 @@ pub async fn dog_commander(
                     println!("Type tag: {}", type_tag);
                     println!("XOR name: 0x{}", xorname_to_hex(xorname));
                     println!("Native data type: {}", data_type);
-                    let mut xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
-                    xorurl_encoder.set_content_type(SafeContentType::Raw)?;
-                    println!("Native data XOR-URL: {}", xorurl_encoder.to_string());
+                    let mut safeurl = SafeUrl::from_url(xorurl)?;
+                    safeurl.set_content_type(SafeContentType::Raw)?;
+                    println!("Native data XOR-URL: {}", safeurl.to_string());
                 }
                 SafeData::PublicBlob {
                     xorurl,
@@ -118,9 +115,9 @@ pub async fn dog_commander(
                     println!("Type tag: {}", type_tag);
                     println!("XOR name: 0x{}", xorname_to_hex(xorname));
                     println!("Native data type: {}", data_type);
-                    let mut xorurl_encoder = XorUrlEncoder::from_url(xorurl)?;
-                    xorurl_encoder.set_content_type(SafeContentType::Raw)?;
-                    println!("Native data XOR-URL: {}", xorurl_encoder.to_string());
+                    let mut safeurl = SafeUrl::from_url(xorurl)?;
+                    safeurl.set_content_type(SafeContentType::Raw)?;
+                    println!("Native data XOR-URL: {}", safeurl.to_string());
                 }
                 SafeData::SafeKey {
                     xorurl,

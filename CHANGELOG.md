@@ -2,6 +2,118 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.3](https://github.com/maidsafe/sn_api/compare/v0.23.2...v0.23.3) (2021-04-15)
+
+### Features
+
+* ***cli*** add '--for-cli' flag to 'keys create' command which sets the newly created SafeKey for CLI use
+
+### [0.23.2](https://github.com/maidsafe/sn_api/compare/v0.23.1...v0.23.2) (2021-04-15)
+
+### Bug Fixes
+
+* ***api*** change stack size to 8mb for Windows builds
+* ***cli*** change stack size to 8mb for Windows builds
+* ***authd*** change stack size to 8mb for Windows builds
+
+### [0.23.1](https://github.com/maidsafe/sn_api/compare/v0.23.0...v0.23.1) (2021-04-13)
+
+### Bug Fixes
+
+* ***api*** upgrading sn_client to v0.52.10
+* ***cli*** enhance CLI 'networks switch' command message explaining how to restart authd
+
+### [0.23.0](https://github.com/maidsafe/sn_api/compare/v0.22.0...v0.23.0) (2021-04-08)
+
+### Features
+
+* ***api*** Upgrade sn_client library to v0.52.9
+
+### Bug Fixes
+
+* ***cli*** node join command was not passing multiple peers addresses correctly to launch tool
+
+### [0.22.0](https://github.com/maidsafe/sn_api/compare/v0.21.0...v0.22.0) (2021-04-07)
+
+### Features
+
+* ***cli*** Update log format to match sn_node
+
+### [0.21.0](https://github.com/maidsafe/sn_api/compare/v0.20.0...v0.21.0) (2021-03-15)
+
+### Features
+
+* ***cli*** upgrade tokio to v1.3.0 and quinn to v0.10.1
+
+* ***authd*** upgrade tokio to v1.3.0 and quinn to v0.10.1
+
+* ***cli*** customise the error message displayed when a panic occurred
+
+### Bug Fixes
+
+* ***api*** fix API tests by retrying some operations when network is not fully in sync
+
+* ***cli*** add instructions to CLI User Guide to install VS C++ redistribution package as Windows requirements
+
+### [0.20.0](https://github.com/maidsafe/sn_api/compare/v0.19.1...v0.20.0) (2021-03-04)
+
+### Features
+
+* ***api*** store serialised NrsMap/FilesMap in a Blob, and only their XOR-URLs in the underlying Sequence of the NrsMapContainer/FilesContainer
+
+* ***api*** adding a README.md file to sn_api crate with a description of the current APIs
+
+* ***cli*** adds bin-version subcommands to node & auth, supressing -V for all subcommands
+
+* ***qjsonrpc*** adds JSON-RPC spec-defined error code constants
+
+### [0.19.1](https://github.com/maidsafe/sn_api/compare/v0.19.0...v0.19.1) (2021-02-23)
+
+### Features
+
+* ***api*** Update to `sn_client` 0.47.1
+
+### [0.19.0](https://github.com/maidsafe/sn_api/compare/v0.18.0...v0.19.0) (2021-02-17)
+
+### Features
+
+* ***cli*** add auth version subcommand which prints out the authd binary version
+
+* ***cli*** command to configure networks in the config by providing a list of IP and ports
+
+* ***cli*** have CLI and authd to set client config path to ~/.safe/client/sn_client.config
+
+### Bug Fixes
+
+* ***cli*** remove short option used for dry run
+
+* ***cli*** ignore error when listing networks and current network is not set in the system
+
+
+### [0.18.0](https://github.com/maidsafe/sn_api/compare/v0.17.2...v0.18.0) (2021-02-04)
+
+### Features
+
+* ***authd*** Prioritise --config over env vars
+* ***api*** Invalidate NRS names with troublesome characters
+* ***api*** Validate length of NRS name and subname
+* ***qjsonrpc*** Add qjsonrpc minimal ping example
+* ***api*** Invalidate public names containing slash char
+
+
+### [0.17.2](https://github.com/maidsafe/sn_api/compare/v0.17.1...v0.17.2) (2021-01-25)
+
+### Features
+
+* ***cli*** Defaults to checking balance of key assigned to CLI
+* ***cli*** Update sn_launch_tool dep to get defaults for qp2p idle-timeout and keepalive
+* ***api*** sn_client updated to v0.44.15
+
+### Bug Fixes
+
+* ***api & authd*** Adds a new error for when Map Entry is not found.
+
+
 ### [0.17.1](https://github.com/maidsafe/sn_api/compare/v0.17.0...v0.17.1) (2021-01-11)
 
 ### Features
@@ -17,7 +129,7 @@ All notable changes to this project will be documented in this file. See [standa
 * ***cli*** fix failing CLI build for MUSL targets
 
 
-### 0.17.0 (2020-12-23)
+### [0.17.0](https://github.com/maidsafe/sn_api/compare/v0.16.0...v0.17.0) (2020-12-23)
 
 ### Features
 
@@ -26,36 +138,50 @@ All notable changes to this project will be documented in this file. See [standa
 ### Bug Fixes
 
 * ***api*** known issue in authorising CLI, as reported in last week's dev update, was solved: https://github.com/maidsafe/sn_api/pull/659
-  
+
 * ***cli*** fix `$ safe update` command as it was not looking up in the correct URL: https://github.com/maidsafe/sn_api/pull/660
 
 * ***cli*** install script had an issue for Mac users: https://github.com/maidsafe/sn_api/pull/661
 
 
-### 0.16.0 (2020-12-17)
+### [0.16.0](https://github.com/maidsafe/sn_api/compare/v0.15.0...v0.16.0) (2020-12-17)
 
 ### Features
 
-* ***api*** re-enable implementation for coins transfers with Ed25519 keys ([b2e3faf](https://github.com/maidsafe/sn_api/commit/b2e3faf9b0943ec779b1e513c76179048dbb0db3))
+* ***api*** re-enable implementation for coins transfers with Ed25519 keys
 
-* ***authd*** insert and retrieve authorised apps keypairs into/from the Safe ([d8186c3](https://github.com/maidsafe/sn_api/commit/d8186c309a7e6ca4862fb8855da6636a9f0d84c6))
+* ***authd*** insert and retrieve authorised apps keypairs into/from the Safe
 
-* ***api*** reenable use of connect from auth responses ([d64d0fd](https://github.com/maidsafe/sn_api/commit/d64d0fd9c0d6cd9002405985ff03f6d9ff7aa695))
+* ***api*** reenable use of connect from auth responses
 
-* ***api*** loop seq gets w/ timeout ([0cd75fb](https://github.com/maidsafe/sn_api/commit/0cd75fbd9aceace5fbfc4b726a48d652177d61ce))
+* ***api*** loop seq gets w/ timeout
 
-* ***authd*** adapt authd client api and service names to new terminology of Safe creation and unlocking ([58ecf7f](https://github.com/maidsafe/sn_api/commit/58ecf7fbae95dee0a103ce39d61efaac6e2cf550))
+* ***authd*** adapt authd client api and service names to new terminology of Safe creation and unlocking
+
+* ***authd*** store generated keypairs on the network
+
+* ***authd*** reenable decoding auth reqs and basic app key generation
+
+* ***authd*** setting up IPC for auth
+
+* ***authd*** moving in basics of auth func into the repo
+
+* ***cli*** install script to auto detect latest version of CLI released
 
 ### Bug Fixes
 
-* ***api*** store Blob API was returning the wrong xorname ([3694efb](https://github.com/maidsafe/sn_api/commit/3694efb16b16fcfc0d34db51187c043d0e24f09c))
+* ***api*** store Blob API was returning the wrong xorname
 
-* ***api*** keys_create_preload_test_coins was not triggering the simulated payout on the newly created SafeKey ([5a30bf3](https://github.com/maidsafe/sn_api/commit/5a30bf331242ba8dd9b3189dc255b134fdf24587))
+* ***api*** keys_create_preload_test_coins was not triggering the simulated payout on the newly created SafeKey
 
-* ***api*** ed_sk_from_hex was deserialising sk with bincode rather than just from raw bytes ([01cc289](https://github.com/maidsafe/sn_api/commit/01cc2894b37908377eb822a826f46c7fef39347e))
+* ***api*** ed_sk_from_hex was deserialising sk with bincode rather than just from raw bytes
+
+* ***api*** remove repeated data storing in SafeAppClient::store_sequence
+
+* ***ffi*** fix typo in authorise_app API
 
 
-### 0.15.0 (2020-07-16)
+### [0.15.0](https://github.com/maidsafe/sn_api/compare/v0.14.0...v0.15.0) (2020-07-16)
 
 ### Features
 
@@ -119,7 +245,7 @@ All notable changes to this project will be documented in this file. See [standa
 
 * ***cli*** Show complete URL resolution chain from dog command. ([3f98b4be](https://github.com/maidsafe/safe-api/commit/3f98b4be0bd40e8e045efccf2308dc082ea1e87e))
 
-* ***api*** Significant reworking of XorUrlEncoder and its API. ([85941f1b](https://github.com/maidsafe/safe-api/commit/85941f1b7080008eb1ffe6d7d408588a1baac33d))
+* ***api*** Significant reworking of SafeUrl and its API. ([85941f1b](https://github.com/maidsafe/safe-api/commit/85941f1b7080008eb1ffe6d7d408588a1baac33d))
 
 * ***api*** Rename SafeUrl properties to match changes in rfc-0052 PR: https://github.com/maidsafe/rfcs/pull/356. ([326cfccd](https://github.com/maidsafe/safe-api/commit/326cfccd433441d602070d04e4e5a3843803131e))
 
@@ -127,7 +253,7 @@ All notable changes to this project will be documented in this file. See [standa
 
 * ***ffi*** Expose vec<string> as string[] in FFI. ([f531ea38](https://github.com/maidsafe/safe-api/commit/f531ea380d4ab5eb6d4e093120b417f9a2997e86))
 
-* ***api*** Parse query params in any type of URL and keep them as part of XorUrlEncoder info. ([3efdacc6](https://github.com/maidsafe/safe-api/commit/3efdacc684a4574b3e99adf59025688c254fa5ba))
+* ***api*** Parse query params in any type of URL and keep them as part of SafeUrl info. ([3efdacc6](https://github.com/maidsafe/safe-api/commit/3efdacc684a4574b3e99adf59025688c254fa5ba))
 
 * ***test*** First version of cmd-test-utils crate. ([81284c43](https://github.com/maidsafe/safe-api/commit/81284c4381d4fcf27531ee28a1dce3cd91e4bd7b))
 
@@ -162,7 +288,7 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### Bug Fixes
 
-* ***api*** verify in XorUrlEncoder::from_url that the URL provided has the minimum length to be valid before processing it ([2554d738](https://github.com/maidsafe/safe-api/commit/2554d738410436f534685160f73eb32d277cf679))
+* ***api*** verify in SafeUrl::from_url that the URL provided has the minimum length to be valid before processing it ([2554d738](https://github.com/maidsafe/safe-api/commit/2554d738410436f534685160f73eb32d277cf679))
 
 * ***cli*** info and warning about missing/invalid credentials are now being logged rather than sent to stdout ([73959656](https://github.com/maidsafe/safe-api/commit/739596560384196b9bebcb68ec9da317080ee834))
 

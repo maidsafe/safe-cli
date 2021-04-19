@@ -11,42 +11,38 @@ mod auth;
 mod consts;
 mod helpers;
 mod keys;
-mod nrs;
-mod realpath;
 mod safe_client;
 mod sequence;
 #[cfg(test)]
 mod test_helpers;
-mod xorurl_media_types;
 
-use super::{common, constants};
+use super::{common, constants, Result};
 use rand::rngs::OsRng;
 use safe_client::SafeAppClient;
+use safeurl::XorUrlBase;
 use sn_data_types::Keypair;
-use std::{sync::Arc, time::Duration};
-use xorurl::XorUrlBase;
+use std::time::Duration;
+
+static DEFAULT_TIMEOUT_SECS: u64 = 20;
 
 // The following is what's meant to be the public API
 
 pub mod fetch;
 pub mod files;
-pub mod nrs_map;
+pub mod nrs;
+pub mod safeurl;
 pub mod wallet;
-pub mod xorurl;
 pub use consts::DEFAULT_XORURL_BASE;
 pub use helpers::parse_coins_amount;
-pub use nrs::ProcessedEntries;
 pub use xor_name::{XorName, XOR_NAME_LEN};
 
-// TODO: should we be cloning this?
 #[derive(Clone)]
 pub struct Safe {
     safe_client: SafeAppClient,
     pub xorurl_base: XorUrlBase,
+    #[allow(dead_code)]
     timeout: Duration,
 }
-
-static DEFAULT_TIMEOUT_SECS: u64 = 20;
 
 impl Default for Safe {
     fn default() -> Self {
@@ -67,8 +63,14 @@ impl Safe {
     }
 
     /// Generate a new random Ed25519 keypair
-    pub fn keypair(&self) -> Arc<Keypair> {
+    pub fn keypair(&self) -> Keypair {
         let mut rng = OsRng;
-        Arc::new(Keypair::new_ed25519(&mut rng))
+        Keypair::new_ed25519(&mut rng)
+    }
+
+    /// Retrieve the keypair this instance was instantiated with, i.e. the
+    /// keypair this instance uses by default to sign each outgoing message
+    pub async fn get_my_keypair(&self) -> Result<Keypair> {
+        self.safe_client.keypair().await
     }
 }
