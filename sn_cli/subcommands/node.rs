@@ -88,6 +88,10 @@ pub enum NodeSubCommands {
         #[structopt(long = "node-path", env = "SN_NODE_PATH")]
         node_path: Option<PathBuf>,
     },
+    Status {
+        #[structopt(long = "node-path", env = "SN_NODE_PATH")]
+        node_path: Option<PathBuf>,
+    },
 }
 
 pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
@@ -146,6 +150,7 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
         ),
         Some(NodeSubCommands::Killall { node_path }) => node_shutdown(node_path),
         Some(NodeSubCommands::Update { node_path }) => node_update(node_path),
+        Some(NodeSubCommands::Status { node_path }) => node_status(node_path, LOCAL_NODE_DIR),
         None => Err(anyhow!("Missing node subcommand")),
     }
 }

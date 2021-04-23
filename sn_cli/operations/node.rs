@@ -15,7 +15,7 @@ use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use sn_launch_tool::{join_with, run_with};
 use std::{
     collections::{HashMap, HashSet},
-    fs::create_dir_all,
+    fs::{self, create_dir_all, read_dir},
     io::{self, Write},
     net::SocketAddr,
     path::PathBuf,
@@ -352,6 +352,14 @@ fn kill_nodes(exec_name: &str) -> Result<()> {
     }
 }
 
+fn is_running(exec_name: &str) -> Result<bool> {
+    let output = Command::new("pgrep")
+        .arg(exec_name)
+        .output()
+        .with_context(|| format!("Error when running command `pgrep {}`", exec_name))?;
+    Ok(output.status.success())
+}
+
 #[cfg(target_os = "windows")]
 fn kill_nodes(exec_name: &str) -> Result<()> {
     let output = Command::new("taskkill")
@@ -406,4 +414,58 @@ pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+}
+
+pub fn node_status(node_path: Option<PathBuf>, local_node_dir: &str) -> Result<()> {
+    let running = is_running(SN_NODE_EXECUTABLE)?;
+
+    let chunks_dir = get_node_bin_path(node_path)?
+        .join(local_node_dir)
+        .join("chunks");
+
+    let mut total_used_space = 0;
+    if chunks_dir.is_dir() {
+        for entry in read_dir(chunks_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                // `path` is a unique store
+                let used_space_path = path.join("used_space");
+                if used_space_path.is_file() {
+                    let contents = fs::read(used_space_path)?;
+                    let used_space = bincode::deserialize::<u64>(&contents)?;
+                    total_used_space += used_space;
+                } else {
+                    return Err(anyhow!(
+                        "used_space file not found for store {:?}",
+                        path.file_name()
+                    ));
+                }
+            }
+        }
+    } else {
+        return Err(anyhow!("Chunks directory not found"));
+    }
+
+    println!("Status: {}", if running { "Running" } else { "Stopped" });
+    if total_used_space > 1024 * 1024 * 1024 {
+        println!(
+            "Total storage used: {:.2} GB",
+            (total_used_space as f64) / (1024.0 * 1024.0 * 1024.0)
+        );
+    } else if total_used_space > 1024 * 1024 {
+        println!(
+            "Total storage used: {:.2} MB",
+            (total_used_space as f64) / (1024.0 * 1024.0)
+        );
+    } else if total_used_space > 1024 {
+        println!(
+            "Total storage used: {:.2} KB",
+            (total_used_space as f64) / 1024.0
+        );
+    } else {
+        println!("Total storage used: {} Bytes", total_used_space);
+    }
+
+    Ok(())
 }
