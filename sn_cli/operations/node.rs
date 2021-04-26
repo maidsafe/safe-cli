@@ -30,6 +30,8 @@ const SN_NODE_EXECUTABLE: &str = "sn_node";
 #[cfg(target_os = "windows")]
 const SN_NODE_EXECUTABLE: &str = "sn_node.exe";
 
+const DEFAULT_MAX_CAPACITY: u64 = 2 * 1024 * 1024 * 1024;
+
 fn run_safe_cmd(
     args: &[&str],
     envs: Option<HashMap<String, String>>,
@@ -231,6 +233,7 @@ pub fn node_join(
     node_data_dir: &str,
     verbosity: u8,
     contacts: &HashSet<SocketAddr>,
+    max_capacity: Option<u64>,
 ) -> Result<()> {
     let node_path = get_node_bin_path(node_path)?;
 
@@ -255,6 +258,13 @@ pub fn node_join(
         "--nodes-dir",
         &arg_nodes_dir,
     ];
+
+    let max_capacity_string;
+    if let Some(mc) = max_capacity {
+        sn_launch_tool_args.push("--max-capacity");
+        max_capacity_string = format!("{}", mc);
+        sn_launch_tool_args.push(&max_capacity_string);
+    }
 
     let mut verbosity_arg = String::from("-");
     if verbosity > 0 {
@@ -416,7 +426,28 @@ pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
     }
 }
 
-pub fn node_status(node_path: Option<PathBuf>, local_node_dir: &str) -> Result<()> {
+fn parse_storage(s: u64) -> String {
+    if s > 1024 * 1024 * 1024 {
+        format!(
+            "{:.2} GB",
+            (s as f64) / (1024.0 * 1024.0 * 1024.0)
+        )
+    } else if s > 1024 * 1024 {
+        format!(
+            "{:.2} MB",
+            (s as f64) / (1024.0 * 1024.0)
+        )
+    } else if s > 1024 {
+        format!(
+            "{:.2} KB",
+            (s as f64) / 1024.0
+        )
+    } else {
+        format!("{} Bytes", s)
+    }
+}
+
+pub fn node_status(node_path: Option<PathBuf>, local_node_dir: &str, max_capacity: Option<u64>) -> Result<()> {
     let running = is_running(SN_NODE_EXECUTABLE)?;
 
     let chunks_dir = get_node_bin_path(node_path)?
@@ -448,24 +479,15 @@ pub fn node_status(node_path: Option<PathBuf>, local_node_dir: &str) -> Result<(
     }
 
     println!("Status: {}", if running { "Running" } else { "Stopped" });
-    if total_used_space > 1024 * 1024 * 1024 {
-        println!(
-            "Total storage used: {:.2} GB",
-            (total_used_space as f64) / (1024.0 * 1024.0 * 1024.0)
-        );
-    } else if total_used_space > 1024 * 1024 {
-        println!(
-            "Total storage used: {:.2} MB",
-            (total_used_space as f64) / (1024.0 * 1024.0)
-        );
-    } else if total_used_space > 1024 {
-        println!(
-            "Total storage used: {:.2} KB",
-            (total_used_space as f64) / 1024.0
-        );
-    } else {
-        println!("Total storage used: {} Bytes", total_used_space);
-    }
+    let used_string = parse_storage(total_used_space);
+    println!("Total storage used: {}", used_string);
+
+    let max_capacity_string = match max_capacity {
+        Some(mc) => parse_storage(mc),
+        None => parse_storage(DEFAULT_MAX_CAPACITY),
+    };
+
+    println!("Storage Limit: {}", max_capacity_string);
 
     Ok(())
 }

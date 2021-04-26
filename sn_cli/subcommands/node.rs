@@ -111,9 +111,9 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
             verbosity,
             hard_coded_contacts,
         }) => {
+            let config = Config::read()?;
             let network_contacts = if hard_coded_contacts.is_empty() {
                 if let Some(name) = network_name {
-                    let config = Config::read()?;
                     let msg = format!("Joining the '{}' network...", name);
                     debug!("{}", msg);
                     println!("{}", msg);
@@ -130,7 +130,7 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
             debug!("{}", msg);
             println!("{}", msg);
 
-            node_join(node_path, LOCAL_NODE_DIR, verbosity, &network_contacts)
+            node_join(node_path, LOCAL_NODE_DIR, verbosity, &network_contacts, config.get_max_capacity())
         }
         Some(NodeSubCommands::Run {
             node_path,
@@ -150,7 +150,11 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
         ),
         Some(NodeSubCommands::Killall { node_path }) => node_shutdown(node_path),
         Some(NodeSubCommands::Update { node_path }) => node_update(node_path),
-        Some(NodeSubCommands::Status { node_path }) => node_status(node_path, LOCAL_NODE_DIR),
+        Some(NodeSubCommands::Status { node_path }) => {
+            let config = Config::read()?;
+            let max_capacity = config.get_max_capacity();
+            node_status(node_path, LOCAL_NODE_DIR, max_capacity)
+        },
         None => Err(anyhow!("Missing node subcommand")),
     }
 }

@@ -20,6 +20,9 @@ pub enum ConfigSubCommands {
     #[structopt(name = "remove")]
     /// Remove a config setting
     Remove(SettingRemoveCmd),
+    #[structopt(name = "set-max-capacity")]
+    /// Set max capacity of node
+    SetMaxCapacity(SetMaxCapacityCmd),
     #[structopt(name = "clear")]
     /// Remove all config settings
     Clear,
@@ -57,6 +60,12 @@ pub enum SettingRemoveCmd {
     // },
 }
 
+#[derive(StructOpt, Debug)]
+pub struct SetMaxCapacityCmd {
+    #[structopt(name = "capacity")]
+    capacity: u64
+}
+
 pub async fn config_commander(cmd: Option<ConfigSubCommands>) -> Result<()> {
     let mut config = Config::read()?;
     match cmd {
@@ -74,6 +83,9 @@ pub async fn config_commander(cmd: Option<ConfigSubCommands>) -> Result<()> {
         Some(ConfigSubCommands::Clear) => {
             config.clear()?;
             debug!("Config settings cleared out");
+        }
+        Some(ConfigSubCommands::SetMaxCapacity(SetMaxCapacityCmd { capacity })) => {
+            config.set_max_capaity(capacity)?;
         }
         None => config.print_networks().await,
     }
