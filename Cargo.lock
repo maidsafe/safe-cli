@@ -3158,6 +3158,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sn_entropy"
+version = "0.1.0"
+dependencies = [
+ "structopt",
+ "thiserror",
+ "walkdir",
+]
+
+[[package]]
 name = "sn_launch_tool"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
