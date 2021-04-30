@@ -130,7 +130,13 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
             debug!("{}", msg);
             println!("{}", msg);
 
-            node_join(node_path, LOCAL_NODE_DIR, verbosity, &network_contacts, config.get_max_capacity())
+            node_join(
+                node_path,
+                LOCAL_NODE_DIR,
+                verbosity,
+                &network_contacts,
+                config.get_max_capacity(),
+            )
         }
         Some(NodeSubCommands::Run {
             node_path,
@@ -154,7 +160,7 @@ pub async fn node_commander(cmd: Option<NodeSubCommands>) -> Result<()> {
             let config = Config::read()?;
             let max_capacity = config.get_max_capacity();
             node_status(node_path, LOCAL_NODE_DIR, max_capacity)
-        },
+        }
         None => Err(anyhow!("Missing node subcommand")),
     }
 }

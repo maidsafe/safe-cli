@@ -54,7 +54,7 @@ impl NetworkInfo {
 #[derive(Deserialize, Debug, Serialize, Default)]
 pub struct Settings {
     networks: BTreeMap<String, NetworkInfo>,
-    max_capacity: Option<u64>
+    max_capacity: Option<u64>,
     // contacts: BTreeMap<String, String>,
 }
 
@@ -128,7 +128,7 @@ impl Config {
         self.settings.max_capacity
     }
 
-    pub fn set_max_capaity(&mut self, capacity: u64) ->Result<()> {
+    pub fn set_max_capaity(&mut self, capacity: u64) -> Result<()> {
         self.settings.max_capacity = Some(capacity);
         self.write_settings_to_file()?;
         Ok(())

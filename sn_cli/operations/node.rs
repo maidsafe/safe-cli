@@ -362,14 +362,6 @@ fn kill_nodes(exec_name: &str) -> Result<()> {
     }
 }
 
-fn is_running(exec_name: &str) -> Result<bool> {
-    let output = Command::new("pgrep")
-        .arg(exec_name)
-        .output()
-        .with_context(|| format!("Error when running command `pgrep {}`", exec_name))?;
-    Ok(output.status.success())
-}
-
 #[cfg(target_os = "windows")]
 fn kill_nodes(exec_name: &str) -> Result<()> {
     let output = Command::new("taskkill")
@@ -395,6 +387,31 @@ fn kill_nodes(exec_name: &str) -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_running(exec_name: &str) -> Result<bool> {
+    let output = Command::new("pgrep")
+        .arg(exec_name)
+        .output()
+        .with_context(|| format!("Error when running command `pgrep {}`", exec_name))?;
+    Ok(output.status.success())
+}
+
+#[cfg(target_os = "windows")]
+fn is_running(exec_name: &str) -> Result<bool> {
+    let output = Command::new("tasklist")
+        .arg("/FI")
+        .arg(format!("imagename eq {}", exec_name))
+        .output()
+        .with_context(|| format!("Error when running command `pgrep {}`", exec_name))?;
+    let mut res = false;
+    String::from_utf8(output.stdout)?.lines().for_each(|line| {
+        if line.contains(exec_name) {
+            res = true;
+        }
+    });
+    Ok(res)
 }
 
 pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
@@ -428,26 +445,21 @@ pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
 
 fn parse_storage(s: u64) -> String {
     if s > 1024 * 1024 * 1024 {
-        format!(
-            "{:.2} GB",
-            (s as f64) / (1024.0 * 1024.0 * 1024.0)
-        )
+        format!("{:.2} GB", (s as f64) / (1024.0 * 1024.0 * 1024.0))
     } else if s > 1024 * 1024 {
-        format!(
-            "{:.2} MB",
-            (s as f64) / (1024.0 * 1024.0)
-        )
+        format!("{:.2} MB", (s as f64) / (1024.0 * 1024.0))
     } else if s > 1024 {
-        format!(
-            "{:.2} KB",
-            (s as f64) / 1024.0
-        )
+        format!("{:.2} KB", (s as f64) / 1024.0)
     } else {
         format!("{} Bytes", s)
     }
 }
 
-pub fn node_status(node_path: Option<PathBuf>, local_node_dir: &str, max_capacity: Option<u64>) -> Result<()> {
+pub fn node_status(
+    node_path: Option<PathBuf>,
+    local_node_dir: &str,
+    max_capacity: Option<u64>,
+) -> Result<()> {
     let running = is_running(SN_NODE_EXECUTABLE)?;
 
     let chunks_dir = get_node_bin_path(node_path)?
@@ -474,8 +486,6 @@ pub fn node_status(node_path: Option<PathBuf>, local_node_dir: &str, max_capacit
                 }
             }
         }
-    } else {
-        return Err(anyhow!("Chunks directory not found"));
     }
 
     println!("Status: {}", if running { "Running" } else { "Stopped" });

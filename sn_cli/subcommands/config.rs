@@ -49,9 +49,7 @@ pub enum SettingAddCmd {
 #[derive(StructOpt, Debug)]
 pub enum SettingSetCmd {
     #[structopt(name = "node-max-capacity")]
-    NodeMaxCapacity {
-        capacity: u64,
-    }
+    NodeMaxCapacity { capacity: u64 },
 }
 
 #[derive(StructOpt, Debug)]
