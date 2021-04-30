@@ -39,7 +39,6 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    #[must_use]
     pub fn try_new<P: AsRef<Path>>(path: P) -> Result<Chunk> {
         let file = std::fs::File::open(path)?;
         Ok(Chunk { file })
