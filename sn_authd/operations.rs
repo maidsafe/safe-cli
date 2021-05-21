@@ -11,6 +11,7 @@ use super::{
     authd::run as authd_run,
     errors::{Error, Result},
 };
+use crate::errors::ErrorKind;
 use cluFlock::ExclusiveFlock;
 use flexi_logger::{DeferredNow, Logger};
 use log::{self, debug, info, Record};
@@ -56,7 +57,10 @@ pub fn stop_authd(log_dir: Option<PathBuf>) -> Result<()> {
 
         if output.status.success() {
             io::stdout().write_all(&output.stdout).map_err(|err| {
-                Error::GeneralError(format!("Failed to output success info: {}", err))
+                Error::from_message(
+                    ErrorKind::GeneralError,
+                    format!("Failed to output success info: {}", err),
+                )
             })?;
             Ok(())
         } else {
@@ -65,7 +69,7 @@ pub fn stop_authd(log_dir: Option<PathBuf>) -> Result<()> {
                 String::from_utf8_lossy(&output.stderr)
             );
             println!("{}", msg);
-            Err(Error::GeneralError(msg))
+            Err(Error::from_message(ErrorKind::GeneralError, msg))
         }
     } else {
         // For Linux and Mac we can read the locked PID file,
@@ -75,11 +79,14 @@ pub fn stop_authd(log_dir: Option<PathBuf>) -> Result<()> {
 
         debug!("Retrieving authd PID from: {:?}", &pid_file_path);
         let mut file = File::open(&pid_file_path).map_err(|err| {
-            Error::GeneralError(format!(
-                "Failed to open sn_authd daemon PID file ('{}') to stop daemon: {}",
-                pid_file_path.display(),
-                err
-            ))
+            Error::from_message(
+                ErrorKind::GeneralError,
+                format!(
+                    "Failed to open sn_authd daemon PID file ('{}') to stop daemon: {}",
+                    pid_file_path.display(),
+                    err
+                ),
+            )
         })?;
         let mut pid = String::new();
         file.read_to_string(&mut pid)?;
@@ -139,7 +146,12 @@ async fn run_in_foreground(listen: &str, log_dir: Option<PathBuf>) -> Result<()>
     } else {
         logger.start()
     }
-    .map_err(|err| Error::GeneralError(format!("Error when initialising logger: {}", err)))?;
+    .map_err(|err| {
+        Error::from_message(
+            ErrorKind::GeneralError,
+            format!("Error when initialising logger: {}", err),
+        )
+    })?;
 
     info!(
         "Running authd instance from executable at \"{}\"",
@@ -168,11 +180,14 @@ async fn run_in_foreground(listen: &str, log_dir: Option<PathBuf>) -> Result<()>
             // We got the lock on the PID file, therefore write our current PID
             pid_file.set_len(0)?;
             write!(pid_file, "{}", pid).map_err(|err| {
-                Error::GeneralError(format!(
-                    "Failed to start sn_authd daemon ({}): {}",
-                    authd_exec.display(),
-                    err.to_string()
-                ))
+                Error::from_message(
+                    ErrorKind::GeneralError,
+                    format!(
+                        "Failed to start sn_authd daemon ({}): {}",
+                        authd_exec.display(),
+                        err.to_string()
+                    ),
+                )
             })?;
 
             info!("Initialising SAFE Authenticator services...");
@@ -206,16 +221,20 @@ async fn run_in_foreground(listen: &str, log_dir: Option<PathBuf>) -> Result<()>
             let res_err = if is_already_started {
                 // A daemon has been already started keeping the lock on the PID file,
                 // although we don't know its status
-                Error::AuthdAlreadyStarted(format!(
-                    "Failed to start sn_authd daemon ({})",
-                    authd_exec.display(),
-                ))
+                Error::from_message_with_suggestions(
+                    ErrorKind::AuthdAlreadyStarted,
+                    format!("Failed to start sn_auth daemon: {}", authd_exec.display()),
+                    vec!["A sn_auth daemon is already running".to_owned()],
+                )
             } else {
-                Error::GeneralError(format!(
-                    "Unknown error when attempting get lock on PID file at {}: {:?}",
-                    pid_file_path.display(),
-                    err
-                ))
+                Error::from_message(
+                    ErrorKind::GeneralError,
+                    format!(
+                        "Unknown error when attempting get lock on PID file at {}: {:?}",
+                        pid_file_path.display(),
+                        err
+                    ),
+                )
             };
 
             Err(res_err)
@@ -260,13 +279,14 @@ fn launch_detached_process(listen: &str, log_dir: Option<PathBuf>) -> Result<()>
     if let Ok(Some(status)) = child.try_wait() {
         let exit_code = status.code().unwrap_or(1);
 
-        let error = Error::from_code(
+        let error = Error::from_code_with_suggestion(
             exit_code,
             format!(
                 "Failed to start sn_authd daemon '{}' (exit code: {})",
                 authd_exec.display(),
                 exit_code
             ),
+            vec!["try running `safe net restart` ".to_owned()],
         );
         println!("{}", error);
         Err(error)
@@ -281,7 +301,10 @@ fn get_authd_log_path(log_dir: Option<PathBuf>) -> Result<PathBuf> {
         Some(p) => Ok(p),
         None => {
             let mut path = dirs_next::home_dir().ok_or_else(|| {
-                Error::GeneralError("Failed to obtain user's home path".to_string())
+                Error::from_message(
+                    ErrorKind::GeneralError,
+                    "Failed to obtain user's home path".to_string(),
+                )
             })?;
 
             // let mut path = PathBuf::from(base_dirs);
@@ -292,10 +315,13 @@ fn get_authd_log_path(log_dir: Option<PathBuf>) -> Result<PathBuf> {
             if !path.exists() {
                 println!("Creating '{}' folder", path.display());
                 create_dir_all(path.clone()).map_err(|err| {
-                    Error::GeneralError(format!(
-                        "Couldn't create target path to store authd log files: {}",
-                        err
-                    ))
+                    Error::from_message(
+                        ErrorKind::GeneralError,
+                        format!(
+                            "Couldn't create target path to store authd log files: {}",
+                            err
+                        ),
+                    )
                 })?;
             }
 

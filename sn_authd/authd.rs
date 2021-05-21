@@ -10,6 +10,7 @@
 use super::{
     notifs::monitor_pending_auth_reqs, requests::process_jsonrpc_request, shared::*, Error, Result,
 };
+use crate::errors::ErrorKind;
 use futures::{lock::Mutex, TryFutureExt};
 use log::{debug, error, info};
 use qjsonrpc::{Endpoint, IncomingJsonRpcRequest, JsonRpcRequest, JsonRpcResponseStream};
@@ -49,7 +50,8 @@ pub async fn run(listen: &str, cert_base_path: Option<&Path>) -> Result<()> {
                 path.push("authd");
                 Ok(path)
             }
-            None => Err(Error::GeneralError(
+            None => Err(Error::from_message(
+                ErrorKind::GeneralError,
                 "Failed to obtain local project directory where to write certificate from"
                     .to_string(),
             )),
@@ -71,8 +73,12 @@ pub async fn run(listen: &str, cert_base_path: Option<&Path>) -> Result<()> {
 // Private helpers
 
 fn get_current_network_conn_info() -> Result<HashSet<SocketAddr>> {
-    let mut conn_info_path = dirs_next::home_dir()
-        .ok_or_else(|| Error::GeneralError("Failed to obtain user's home path".to_string()))?;
+    let mut conn_info_path = dirs_next::home_dir().ok_or_else(|| {
+        Error::from_message(
+            ErrorKind::GeneralError,
+            "Failed to obtain user's home path".to_string(),
+        )
+    })?;
 
     conn_info_path.push(".safe");
     conn_info_path.push("node");
@@ -84,18 +90,28 @@ fn get_current_network_conn_info() -> Result<HashSet<SocketAddr>> {
         conn_info_path.display()
     );
     let bytes = fs::read(&conn_info_path).map_err(|err| {
-        Error::GeneralError(format!(
-            "Unable to read connection information from '{}': {}",
-            conn_info_path.display(),
-            err
-        ))
+        Error::from_message_with_suggestions(
+            ErrorKind::GeneralError,
+            format!(
+                "Unable to read connection information from '{}': {}",
+                conn_info_path.display(),
+                err
+            ),
+            vec![
+                "Ensure the network is set up with `safe networks` command".to_string(),
+                "",
+            ],
+        )
     })?;
 
     serde_json::from_slice(&bytes).map_err(|err| {
-        Error::GeneralError(format!(
-            "Format of the contacts addresses is not valid and couldn't be parsed: {}",
-            err
-        ))
+        Error::from_message(
+            ErrorKind::GeneralError,
+            format!(
+                "Format of the contacts addresses is not valid and couldn't be parsed: {}",
+                err
+            ),
+        )
     })
 }
 
@@ -117,16 +133,33 @@ async fn start_listening(
     notif_endpoints_handle: SharedNotifEndpointsHandle,
 ) -> Result<()> {
     let listen_socket_addr = Url::parse(listen)
-        .map_err(|_| Error::GeneralError("Invalid endpoint address".to_string()))?
+        .map_err(|_| {
+            Error::from_message(
+                ErrorKind::GeneralError,
+                "Invalid endpoint address".to_string(),
+            )
+        })?
         .socket_addrs(|| None)
-        .map_err(|_| Error::GeneralError("Invalid endpoint address".to_string()))?[0];
+        .map_err(|_| {
+            Error::from_message(
+                ErrorKind::GeneralError,
+                "Invalid endpoint address".to_string(),
+            )
+        })?[0];
 
-    let qjsonrpc_endpoint = Endpoint::new(cert_base_path, idle_timeout)
-        .map_err(|err| Error::GeneralError(format!("Failed to create endpoint: {}", err)))?;
+    let qjsonrpc_endpoint = Endpoint::new(cert_base_path, idle_timeout).map_err(|err| {
+        Error::from_message(
+            ErrorKind::GeneralError,
+            format!("Failed to create endpoint: {}", err),
+        )
+    })?;
 
-    let mut incoming_conn = qjsonrpc_endpoint
-        .bind(&listen_socket_addr)
-        .map_err(|err| Error::GeneralError(format!("Failed to bind endpoint: {}", err)))?;
+    let mut incoming_conn = qjsonrpc_endpoint.bind(&listen_socket_addr).map_err(|err| {
+        Error::from_message(
+            ErrorKind::GeneralError,
+            format!("Failed to bind endpoint: {}", err),
+        )
+    })?;
     info!("Listening on {}", listen_socket_addr);
 
     // Let's spawn a task which will monitor pending auth reqs
@@ -195,14 +228,20 @@ async fn handle_request(
     .await?;
 
     // Write the response
-    send.respond(&resp)
-        .await
-        .map_err(|e| Error::GeneralError(format!("Failed to send response: {}", e)))?;
+    send.respond(&resp).await.map_err(|e| {
+        Error::from_message(
+            ErrorKind::GeneralError,
+            format!("Failed to send response: {}", e),
+        )
+    })?;
 
     // Gracefully terminate the stream
-    send.finish()
-        .await
-        .map_err(|e| Error::GeneralError(format!("Failed to shutdown stream: {}", e)))?;
+    send.finish().await.map_err(|e| {
+        Error::from_message(
+            ErrorKind::GeneralError,
+            format!("Failed to shutdown stream: {}", e),
+        )
+    })?;
 
     info!("Response sent, request {} complete", req_id);
     Ok(())
