@@ -17,6 +17,9 @@ pub enum ConfigSubCommands {
     #[structopt(name = "add")]
     /// Add a config setting
     Add(SettingAddCmd),
+    #[structopt(name = "set")]
+    /// Set a config setting
+    Set(SettingSetCmd),
     #[structopt(name = "remove")]
     /// Remove a config setting
     Remove(SettingRemoveCmd),
@@ -44,6 +47,12 @@ pub enum SettingAddCmd {
 }
 
 #[derive(StructOpt, Debug)]
+pub enum SettingSetCmd {
+    #[structopt(name = "node-max-capacity")]
+    NodeMaxCapacity { capacity: u64 },
+}
+
+#[derive(StructOpt, Debug)]
 pub enum SettingRemoveCmd {
     #[structopt(name = "network")]
     Network {
@@ -67,6 +76,9 @@ pub async fn config_commander(cmd: Option<ConfigSubCommands>) -> Result<()> {
             config.add_network(&network_name, config_location.map(NetworkInfo::ConnInfoUrl))?;
         }
         // Some(ConfigSubCommands::Add(SettingAddCmd::Contact { name, safeid })) => {}
+        Some(ConfigSubCommands::Set(SettingSetCmd::NodeMaxCapacity { capacity })) => {
+            config.set_max_capaity(capacity)?;
+        }
         Some(ConfigSubCommands::Remove(SettingRemoveCmd::Network { network_name })) => {
             config.remove_network(&network_name)?
         }

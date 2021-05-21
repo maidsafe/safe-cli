@@ -15,7 +15,7 @@ use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use sn_launch_tool::{join_with, run_with};
 use std::{
     collections::{HashMap, HashSet},
-    fs::create_dir_all,
+    fs::{self, create_dir_all, read_dir},
     io::{self, Write},
     net::SocketAddr,
     path::PathBuf,
@@ -29,6 +29,8 @@ const SN_NODE_EXECUTABLE: &str = "sn_node";
 
 #[cfg(target_os = "windows")]
 const SN_NODE_EXECUTABLE: &str = "sn_node.exe";
+
+const DEFAULT_MAX_CAPACITY: u64 = 2 * 1024 * 1024 * 1024;
 
 fn run_safe_cmd(
     args: &[&str],
@@ -231,6 +233,7 @@ pub fn node_join(
     node_data_dir: &str,
     verbosity: u8,
     contacts: &HashSet<SocketAddr>,
+    max_capacity: Option<u64>,
 ) -> Result<()> {
     let node_path = get_node_bin_path(node_path)?;
 
@@ -255,6 +258,13 @@ pub fn node_join(
         "--nodes-dir",
         &arg_nodes_dir,
     ];
+
+    let max_capacity_string;
+    if let Some(mc) = max_capacity {
+        sn_launch_tool_args.push("--max-capacity");
+        max_capacity_string = format!("{}", mc);
+        sn_launch_tool_args.push(&max_capacity_string);
+    }
 
     let mut verbosity_arg = String::from("-");
     if verbosity > 0 {
@@ -379,6 +389,31 @@ fn kill_nodes(exec_name: &str) -> Result<()> {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
+fn is_running(exec_name: &str) -> Result<bool> {
+    let output = Command::new("pgrep")
+        .arg(exec_name)
+        .output()
+        .with_context(|| format!("Error when running command `pgrep {}`", exec_name))?;
+    Ok(output.status.success())
+}
+
+#[cfg(target_os = "windows")]
+fn is_running(exec_name: &str) -> Result<bool> {
+    let output = Command::new("tasklist")
+        .arg("/FI")
+        .arg(format!("imagename eq {}", exec_name))
+        .output()
+        .with_context(|| format!("Error when running command `pgrep {}`", exec_name))?;
+    let mut res = false;
+    String::from_utf8(output.stdout)?.lines().for_each(|line| {
+        if line.contains(exec_name) {
+            res = true;
+        }
+    });
+    Ok(res)
+}
+
 pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
     let node_path = get_node_bin_path(node_path)?;
 
@@ -406,4 +441,63 @@ pub fn node_update(node_path: Option<PathBuf>) -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         ))
     }
+}
+
+fn parse_storage(s: u64) -> String {
+    if s > 1024 * 1024 * 1024 {
+        format!("{:.2} GB", (s as f64) / (1024.0 * 1024.0 * 1024.0))
+    } else if s > 1024 * 1024 {
+        format!("{:.2} MB", (s as f64) / (1024.0 * 1024.0))
+    } else if s > 1024 {
+        format!("{:.2} KB", (s as f64) / 1024.0)
+    } else {
+        format!("{} Bytes", s)
+    }
+}
+
+pub fn node_status(
+    node_path: Option<PathBuf>,
+    local_node_dir: &str,
+    max_capacity: Option<u64>,
+) -> Result<()> {
+    let running = is_running(SN_NODE_EXECUTABLE)?;
+
+    let chunks_dir = get_node_bin_path(node_path)?
+        .join(local_node_dir)
+        .join("chunks");
+
+    let mut total_used_space = 0;
+    if chunks_dir.is_dir() {
+        for entry in read_dir(chunks_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                // `path` is a unique store
+                let used_space_path = path.join("used_space");
+                if used_space_path.is_file() {
+                    let contents = fs::read(used_space_path)?;
+                    let used_space = bincode::deserialize::<u64>(&contents)?;
+                    total_used_space += used_space;
+                } else {
+                    return Err(anyhow!(
+                        "used_space file not found for store {:?}",
+                        path.file_name()
+                    ));
+                }
+            }
+        }
+    }
+
+    println!("Status: {}", if running { "Running" } else { "Stopped" });
+    let used_string = parse_storage(total_used_space);
+    println!("Total storage used: {}", used_string);
+
+    let max_capacity_string = match max_capacity {
+        Some(mc) => parse_storage(mc),
+        None => parse_storage(DEFAULT_MAX_CAPACITY),
+    };
+
+    println!("Storage Limit: {}", max_capacity_string);
+
+    Ok(())
 }

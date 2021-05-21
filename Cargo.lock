@@ -3054,6 +3054,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "async-std",
+ "bincode",
  "chrono",
  "console",
  "criterion",
